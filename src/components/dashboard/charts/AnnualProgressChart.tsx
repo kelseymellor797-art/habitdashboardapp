@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -33,8 +34,12 @@ function getBarColor(pct: number): string {
 }
 
 export default function AnnualProgressChart() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
   return (
-    <ResponsiveContainer width="100%" height={200}>
+    <ResponsiveContainer width="100%" height={200} minWidth={0}>
       <BarChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="3 3" />
         <XAxis

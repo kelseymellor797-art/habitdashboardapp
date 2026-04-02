@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -19,8 +20,12 @@ const weeklyData = [
 ];
 
 export default function WeeklyCompletionChart() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
   return (
-    <ResponsiveContainer width="100%" height={180}>
+    <ResponsiveContainer width="100%" height={180} minWidth={0}>
       <BarChart data={weeklyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
         <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="3 3" />
         <XAxis
