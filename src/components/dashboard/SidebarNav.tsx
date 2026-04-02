@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const VIEWS = [
-  { label: "Monthly",  href: "/dashboard", icon: "◫" },
-  { label: "Weekly",   href: "/weekly",    icon: "▦" },
-  { label: "Annual",   href: "/annual",    icon: "▣" },
+  { label: "Daily",   href: "/daily",   icon: "◎" },
+  { label: "Weekly",  href: "/weekly",  icon: "▦" },
+  { label: "Monthly", href: "/monthly", icon: "◫" },
+  { label: "Annual",  href: "/annual",  icon: "▣" },
 ];
 
 const MANAGE = [
