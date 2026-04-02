@@ -59,3 +59,69 @@ export const ROUTINE_BY_HABIT_ID: Record<string, Routine> = Object.fromEntries(
 );
 
 export const ROUTINE_STORAGE_KEY = "habitflow-routine-entries-jan2025";
+
+// ── User-editable routine definitions ─────────────────────────────────────────
+
+/** Storage key for user-created/edited routine definitions */
+export const ROUTINE_DEFS_STORAGE_KEY = "habitflow-routine-defs";
+
+export type StoredSubtask = {
+  id: string;
+  name: string;
+  target?: string;
+};
+
+export type StoredRoutineDef = {
+  name: string;
+  subtasks: StoredSubtask[];
+};
+
+/**
+ * Load user routine defs from localStorage, merged with seeded defaults.
+ * Seeded routines are the baseline; stored defs override them.
+ */
+export function loadRoutineDefs(): Record<string, StoredRoutineDef> {
+  // Build seed baseline
+  const base: Record<string, StoredRoutineDef> = {};
+  for (const r of ROUTINES) {
+    base[r.habitId] = {
+      name: r.name,
+      subtasks: r.subtasks.map((s) => ({ id: s.id, name: s.name, target: s.target })),
+    };
+  }
+  if (typeof window === "undefined") return base;
+  try {
+    const raw = localStorage.getItem(ROUTINE_DEFS_STORAGE_KEY);
+    if (!raw) return base;
+    return { ...base, ...(JSON.parse(raw) as Record<string, StoredRoutineDef>) };
+  } catch {
+    return base;
+  }
+}
+
+export function saveRoutineDefs(defs: Record<string, StoredRoutineDef>) {
+  localStorage.setItem(ROUTINE_DEFS_STORAGE_KEY, JSON.stringify(defs));
+}
+
+/** Convert StoredRoutineDefs to Routine[] lookup for use in HabitGrid */
+export function defsToRoutineMap(
+  defs: Record<string, StoredRoutineDef>
+): Record<string, Routine> {
+  const result: Record<string, Routine> = {};
+  for (const [habitId, def] of Object.entries(defs)) {
+    if (!def.name || !def.subtasks.length) continue;
+    const routineId = `routine-${habitId}`;
+    result[habitId] = {
+      id: routineId,
+      name: def.name,
+      habitId,
+      subtasks: def.subtasks.map((s) => ({
+        id: s.id,
+        routineId,
+        name: s.name,
+        target: s.target,
+      })),
+    };
+  }
+  return result;
+}

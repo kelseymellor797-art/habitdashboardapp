@@ -44,6 +44,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-4 gap-3">
         {summaryCards.map((card) => <SummaryCard key={card.label} {...card} />)}
       </div>
+      <HabitGrid />
       <div className="grid grid-cols-[220px_1fr_220px] gap-3">
         <Panel className="flex flex-col">
           <SectionTitle title="January Stats" />
@@ -82,7 +83,6 @@ export default function DashboardPage() {
           </div>
         </Panel>
       </div>
-      <HabitGrid />
     </div>
   );
 }
