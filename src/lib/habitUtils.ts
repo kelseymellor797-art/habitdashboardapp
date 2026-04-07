@@ -29,6 +29,26 @@ export function calcRemaining(completed: number, goal: number): number {
   return Math.max(0, goal - completed);
 }
 
+// ── Category-driven color resolution ──────────────────────────────────────────
+
+export const DEFAULT_HABIT_COLOR = "#6b7280";
+
+/**
+ * Resolves the display color for a habit or routine.
+ * If a categoryId is set and the matching category has a color, that color
+ * is returned. Otherwise falls back to the item's own color or a neutral grey.
+ */
+export function resolveHabitColor(
+  item: { color?: string; categoryId?: string },
+  categories: { id: string; color?: string }[],
+): string {
+  if (item.categoryId) {
+    const cat = categories.find((c) => c.id === item.categoryId);
+    if (cat?.color) return cat.color;
+  }
+  return item.color || DEFAULT_HABIT_COLOR;
+}
+
 export function calcStreak(completions: Set<number>, fromDay: number): number {
   let streak = 0;
   for (let d = fromDay; d >= 1; d--) {

@@ -9,7 +9,7 @@ import { loadHabits, loadCompletions, getMonthCompletionSet, type Habit, type Co
 import { loadRoutines, loadRoutineEntries, type Routine, type RoutineEntry } from "@/lib/routineData";
 import { calcRoutinePct, routineEntryKey } from "@/lib/routineUtils";
 import { MONTH_CONFIG } from "@/lib/habitData";
-import { calcStreak, isDueOnDay } from "@/lib/habitUtils";
+import { calcStreak, isDueOnDay, resolveHabitColor } from "@/lib/habitUtils";
 import { loadCategories, type Category } from "@/lib/categoryData";
 
 const { todayDay, startDow } = MONTH_CONFIG;
@@ -200,11 +200,13 @@ export default function WeeklyPage() {
                       </td>
                     </tr>
                   )}
-                  {rows.map(({ id, name, color, weekPct, cells, isRoutine }) => (
+                  {rows.map(({ id, name, color, categoryId, weekPct, cells, isRoutine }) => {
+                    const resolvedColor = resolveHabitColor({ color, categoryId }, categories);
+                    return (
                     <tr key={id}>
                       <td className="py-2.5 pr-4">
                         <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvedColor }} />
                           <span className="text-[12px] text-white/65 truncate max-w-[130px]">{name}</span>
                           {isRoutine && (
                             <span className="text-[8px] text-white/25 bg-white/[0.05] px-1 py-0.5 rounded shrink-0">routine</span>
@@ -218,13 +220,13 @@ export default function WeeklyPage() {
                               style={{
                                 backgroundColor:
                                   future || !scheduled ? "transparent"
-                                  : done ? color
+                                  : done ? resolvedColor
                                   : (isRoutine && pct > 0) ? "#f59e0b33"
                                   : "rgba(255,255,255,0.05)",
                                 border:
                                   future ? "1px solid rgba(255,255,255,0.04)"
                                   : !scheduled ? "1px solid rgba(255,255,255,0.03)"
-                                  : done ? `1px solid ${color}`
+                                  : done ? `1px solid ${resolvedColor}`
                                   : (isRoutine && pct > 0) ? "1px solid #f59e0b66"
                                   : "1px solid rgba(255,255,255,0.08)",
                               }}>
@@ -244,10 +246,11 @@ export default function WeeklyPage() {
                         </td>
                       ))}
                       <td className="py-2.5 pl-4 text-right">
-                        <span className="text-[11px] font-semibold tabular-nums" style={{ color }}>{weekPct}%</span>
+                        <span className="text-[11px] font-semibold tabular-nums" style={{ color: resolvedColor }}>{weekPct}%</span>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </Fragment>
               ))}
               {allRows.length === 0 && (

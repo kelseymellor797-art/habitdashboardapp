@@ -12,7 +12,7 @@ import {
   loadHabits, loadCompletions, saveCompletions, toggleCompletion,
   getMonthCompletionSet, dayToDate, notifyUpdate,
 } from "@/lib/store";
-import { isDueToday, DOW_FULL_LABELS } from "@/lib/habitUtils";
+import { isDueToday, DOW_FULL_LABELS, resolveHabitColor } from "@/lib/habitUtils";
 import { loadCategories, type Category } from "@/lib/categoryData";
 import Panel from "@/components/dashboard/Panel";
 import SectionTitle from "@/components/dashboard/SectionTitle";
@@ -172,12 +172,12 @@ export default function DailyPage() {
               <div className="flex flex-col divide-y divide-white/[0.04] mt-4">
                 {pending.map((item) =>
                   item.kind === "habit"
-                    ? <HabitRow   key={item.habit.id}    habit={item.habit}       isComplete={false} onToggle={() => toggleHabit(item.habit.id)} />
+                    ? <HabitRow   key={item.habit.id}    habit={item.habit}       isComplete={false} onToggle={() => toggleHabit(item.habit.id)} color={resolveHabitColor(item.habit, categories)} />
                     : <RoutineRow key={item.routine.id}  routine={item.routine}   isComplete={false} pct={item.pct} onOpen={() => setActiveRoutineId(item.routine.id)} />
                 )}
                 {completed.map((item) =>
                   item.kind === "habit"
-                    ? <HabitRow   key={item.habit.id}   habit={item.habit}      isComplete onToggle={() => toggleHabit(item.habit.id)} />
+                    ? <HabitRow   key={item.habit.id}   habit={item.habit}      isComplete onToggle={() => toggleHabit(item.habit.id)} color={resolveHabitColor(item.habit, categories)} />
                     : <RoutineRow key={item.routine.id} routine={item.routine}  isComplete pct={item.pct} onOpen={() => setActiveRoutineId(item.routine.id)} />
                 )}
               </div>
@@ -231,10 +231,10 @@ function RingProgress({ pct }: { pct: number }) {
   );
 }
 
-function HabitRow({ habit, isComplete, onToggle }: { habit: Habit; isComplete: boolean; onToggle: () => void }) {
+function HabitRow({ habit, isComplete, onToggle, color }: { habit: Habit; isComplete: boolean; onToggle: () => void; color: string }) {
   return (
     <div className={`flex items-center gap-4 py-4 transition-opacity ${isComplete ? "opacity-50" : "opacity-100"}`}>
-      <div className="w-[3px] h-10 rounded-full shrink-0" style={{ backgroundColor: habit.color }} />
+      <div className="w-[3px] h-10 rounded-full shrink-0" style={{ backgroundColor: color }} />
       <div className="flex-1 min-w-0">
         <span className={`text-[14px] font-medium transition-colors ${isComplete ? "text-white/35 line-through decoration-white/15" : "text-white/85"}`}>
           {habit.name}
@@ -244,10 +244,10 @@ function HabitRow({ habit, isComplete, onToggle }: { habit: Habit; isComplete: b
         className={`w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all active:scale-[0.85] ${
           isComplete ? "border-transparent" : "border-white/15 hover:border-white/35 bg-white/[0.02] hover:bg-white/[0.05]"
         }`}
-        style={isComplete ? { backgroundColor: `${habit.color}25`, borderColor: `${habit.color}55` } : {}}>
+        style={isComplete ? { backgroundColor: `${color}25`, borderColor: `${color}55` } : {}}>
         {isComplete && (
           <svg width="14" height="11" viewBox="0 0 14 11" fill="none">
-            <path d="M1 5.5l4 4L13 1" stroke={habit.color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M1 5.5l4 4L13 1" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
       </button>

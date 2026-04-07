@@ -5,7 +5,7 @@ import Panel from "@/components/dashboard/Panel";
 import SectionTitle from "@/components/dashboard/SectionTitle";
 import { type Habit, type ScheduleType, loadHabits, saveHabits, generateId, notifyUpdate } from "@/lib/store";
 import { type Category, loadCategories } from "@/lib/categoryData";
-import { DOW_FULL_LABELS } from "@/lib/habitUtils";
+import { DOW_FULL_LABELS, resolveHabitColor } from "@/lib/habitUtils";
 
 const COLORS = [
   "#8b5cf6","#10b981","#0ea5e9","#f59e0b",
@@ -266,8 +266,17 @@ export default function HabitsPage() {
             </div>
             <CategorySelect
               value={form.categoryId}
-              onChange={(v) => setForm((p) => ({ ...p, categoryId: v }))}
+              onChange={(v) => {
+                const cc = categories.find((c) => c.id === v)?.color;
+                setForm((p) => ({ ...p, categoryId: v, ...(cc ? { color: cc } : {}) }));
+              }}
             />
+            {form.categoryId ? (
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full shrink-0" style={{ backgroundColor: catColor(form.categoryId) ?? form.color }} />
+                <span className="text-[11px] text-white/40">Color inherited from category</span>
+              </div>
+            ) : (
             <div className="flex gap-2 flex-wrap">
               {COLORS.map((c) => (
                 <div
@@ -278,6 +287,7 @@ export default function HabitsPage() {
                 />
               ))}
             </div>
+            )}
             <div className="flex gap-2">
               <button onClick={addHabit} className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 transition-colors text-sm font-medium">Save</button>
               <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] transition-colors text-sm text-white/60">Cancel</button>
@@ -329,8 +339,17 @@ export default function HabitsPage() {
                   </div>
                   <CategorySelect
                     value={(editDraft.categoryId as string) ?? ""}
-                    onChange={(v) => setEditDraft((p) => ({ ...p, categoryId: v }))}
+                    onChange={(v) => {
+                      const cc = categories.find((c) => c.id === v)?.color;
+                      setEditDraft((p) => ({ ...p, categoryId: v, ...(cc ? { color: cc } : {}) }));
+                    }}
                   />
+                  {editDraft.categoryId ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full shrink-0" style={{ backgroundColor: catColor(editDraft.categoryId as string) ?? editDraft.color ?? habit.color }} />
+                      <span className="text-[11px] text-white/40">Color inherited from category</span>
+                    </div>
+                  ) : (
                   <div className="flex gap-2 flex-wrap">
                     {COLORS.map((c) => (
                       <div
@@ -345,6 +364,7 @@ export default function HabitsPage() {
                       />
                     ))}
                   </div>
+                  )}
                   <div className="flex gap-2">
                     <button
                       onClick={() => saveEdit(habit.id)}
@@ -362,7 +382,7 @@ export default function HabitsPage() {
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: habit.color }} />
+                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: resolveHabitColor(habit, categories) }} />
                   <span className="flex-1 text-sm font-medium text-white/85">{habit.name}</span>
                   <span className="text-[10px] text-white/30 bg-white/[0.04] rounded-full px-2 py-0.5">{scheduleBadge(habit)}</span>
                   <span className="text-[10px] text-white/30 bg-white/[0.04] rounded-full px-2 py-0.5">Goal: {habit.goal}/mo</span>

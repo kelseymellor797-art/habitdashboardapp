@@ -8,7 +8,8 @@ import SummaryCard from "@/components/dashboard/SummaryCard";
 import MonthlyProgressChart from "@/components/dashboard/charts/MonthlyProgressChart";
 import { loadHabits, loadCompletions, getMonthCompletionSet, type Habit, type Completion } from "@/lib/store";
 import { MONTH_CONFIG } from "@/lib/habitData";
-import { calcCompleted, calcPct, calcStreak } from "@/lib/habitUtils";
+import { calcCompleted, calcPct, calcStreak, resolveHabitColor } from "@/lib/habitUtils";
+import { loadCategories, type Category } from "@/lib/categoryData";
 
 const { todayDay, daysInMonth, label: monthLabel, year, month } = MONTH_CONFIG;
 
@@ -18,7 +19,7 @@ function computeStats(habits: Habit[], completions: Completion[]) {
     const completed = calcCompleted(set, todayDay);
     const pct = calcPct(completed, h.goal);
     const streak = calcStreak(set, todayDay);
-    return { name: h.name, color: h.color, streak, pct, completed };
+    return { name: h.name, color: h.color, categoryId: h.categoryId, streak, pct, completed };
   });
 
   const totalDone = rows.reduce((s, r) => s + r.completed, 0);
@@ -46,9 +47,13 @@ function computeStats(habits: Habit[], completions: Completion[]) {
 
 export default function MonthlyPage() {
   const [stats, setStats] = useState(() => computeStats([], []));
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
-    const reload = () => setStats(computeStats(loadHabits(), loadCompletions()));
+    const reload = () => {
+      setStats(computeStats(loadHabits(), loadCompletions()));
+      setCategories(loadCategories());
+    };
     reload();
     window.addEventListener("habitflow:updated", reload);
     return () => window.removeEventListener("habitflow:updated", reload);
@@ -112,21 +117,24 @@ export default function MonthlyPage() {
             {stats.rows.length === 0 && (
               <p className="text-[11px] text-white/20 text-center py-4">No habits yet</p>
             )}
-            {stats.rows.sort((a,b) => b.streak - a.streak).slice(0, 5).map((h, i) => (
+            {stats.rows.sort((a,b) => b.streak - a.streak).slice(0, 5).map((h, i) => {
+              const resolvedColor = resolveHabitColor(h, categories);
+              return (
               <div key={h.name} className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-white/20 tabular-nums w-3">{i + 1}</span>
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: h.color }} />
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvedColor }} />
                     <span className="text-[11px] text-white/60 truncate max-w-[100px]">{h.name}</span>
                   </div>
                   <span className="text-[11px] font-semibold text-amber-400 tabular-nums">🔥 {h.streak}d</span>
                 </div>
                 <div className="h-[3px] rounded-full bg-white/[0.06]">
-                  <div className="h-full rounded-full" style={{ width: `${h.pct}%`, backgroundColor: h.color }} />
+                  <div className="h-full rounded-full" style={{ width: `${h.pct}%`, backgroundColor: resolvedColor }} />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       </div>

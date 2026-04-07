@@ -8,7 +8,7 @@ import AnnualProgressChart from "@/components/dashboard/charts/AnnualProgressCha
 import { loadHabits, loadCompletions, getMonthCompletionSet, type Habit, type Completion } from "@/lib/store";
 import { loadRoutines, loadRoutineEntries, type Routine, type RoutineEntry } from "@/lib/routineData";
 import { MONTH_CONFIG } from "@/lib/habitData";
-import { calcCompleted, calcPct, calcStreak } from "@/lib/habitUtils";
+import { calcCompleted, calcPct, calcStreak, resolveHabitColor } from "@/lib/habitUtils";
 import { calcRoutinePct, routineEntryKey } from "@/lib/routineUtils";
 import { loadCategories, type Category } from "@/lib/categoryData";
 
@@ -207,18 +207,19 @@ export default function AnnualPage() {
                   )}
                   {rows.sort((a, b) => b.pct - a.pct).map((h) => {
                     const idx = globalIdx++;
+                    const resolvedColor = resolveHabitColor(h, categories);
                     return (
                       <div key={h.id ?? h.name} className="flex flex-col gap-1.5 mb-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-white/20 tabular-nums w-3">{idx + 1}</span>
-                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: h.color }} />
+                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvedColor }} />
                             <span className="text-[10px] text-white/55 truncate max-w-[100px]">{h.name}</span>
                           </div>
-                          <span className="text-[11px] font-semibold tabular-nums" style={{ color: h.color }}>{h.pct}%</span>
+                          <span className="text-[11px] font-semibold tabular-nums" style={{ color: resolvedColor }}>{h.pct}%</span>
                         </div>
                         <div className="h-[3px] rounded-full bg-white/[0.06]">
-                          <div className="h-full rounded-full" style={{ width: `${h.pct}%`, backgroundColor: h.color }} />
+                          <div className="h-full rounded-full" style={{ width: `${h.pct}%`, backgroundColor: resolvedColor }} />
                         </div>
                       </div>
                     );

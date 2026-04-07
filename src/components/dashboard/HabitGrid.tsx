@@ -16,6 +16,7 @@ import {
   calcStreak,
   dayOfWeek,
   isWeekBoundary,
+  resolveHabitColor,
 } from "@/lib/habitUtils";
 import {
   calcRoutinePct,
@@ -50,11 +51,13 @@ function HabitCell({
   habit,
   completions,
   onClick,
+  color,
 }: {
   day: number;
   habit: Habit;
   completions: Completion[];
   onClick: () => void;
+  color: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const isFuture = day > todayDay;
@@ -68,8 +71,8 @@ function HabitCell({
     bgColor = "transparent";
     border = "1px solid rgba(255,255,255,0.04)";
   } else if (done) {
-    bgColor = habit.color;
-    border = `1px solid ${habit.color}`;
+    bgColor = color;
+    border = `1px solid ${color}`;
     content = (
       <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
         <path d="M1.5 5L4 7.5L8.5 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -77,7 +80,7 @@ function HabitCell({
     );
   } else {
     bgColor = hovered ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)";
-    border = hovered ? `1px solid ${habit.color}66` : "1px solid rgba(255,255,255,0.06)";
+    border = hovered ? `1px solid ${color}66` : "1px solid rgba(255,255,255,0.06)";
     content = hovered ? <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", lineHeight: 1 }}>+</span> : null;
   }
 
@@ -322,22 +325,25 @@ export default function HabitGrid() {
                 </div>
               )}
 
-              {catHabits.map((h, rowIdx) => (
+              {catHabits.map((h, rowIdx) => {
+                const resolvedColor = resolveHabitColor(h, categories);
+                return (
                 <div key={h.id} className={`flex items-center gap-1 ${rowIdx < catHabits.length - 1 || catRoutines.length > 0 ? "mb-2.5" : ""}`}>
                   <div className="w-[152px] shrink-0 flex items-center gap-2 pr-2">
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: h.color }} />
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: resolvedColor }} />
                     <span className="text-[11px] text-white/55 truncate">{h.name}</span>
-                    <span className="ml-auto text-[10px] tabular-nums shrink-0" style={{ color: h.color + "99" }}>{h.pct}%</span>
+                    <span className="ml-auto text-[10px] tabular-nums shrink-0" style={{ color: resolvedColor + "99" }}>{h.pct}%</span>
                   </div>
                   {DAYS.map((day) => (
                     <HabitCell key={day} day={day} habit={h} completions={completions}
-                      onClick={() => handleHabitCellClick(h.id, day)} />
+                      onClick={() => handleHabitCellClick(h.id, day)} color={resolvedColor} />
                   ))}
                   <div className="ml-2 text-[10px] tabular-nums text-amber-400/70 w-8 shrink-0">
                     {h.streak > 0 ? `\uD83D\uDD25${h.streak}` : ""}
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {catRoutines.map((r, rowIdx) => (
                 <div key={r.id} className={`flex items-center gap-1 ${rowIdx < catRoutines.length - 1 ? "mb-2.5" : ""}`}>
