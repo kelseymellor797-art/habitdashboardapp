@@ -1,8 +1,63 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Panel from "@/components/dashboard/Panel";
 import SectionTitle from "@/components/dashboard/SectionTitle";
-import { STORAGE_KEY } from "@/lib/habitData";
+import {
+  type Category,
+  loadCategories, saveCategories, generateCategoryId, CATEGORY_COLORS,
+} from "@/lib/categoryData";
+import { notifyUpdate } from "@/lib/store";
+
 
 export default function SettingsPage() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState("");
+  const [showAddCat, setShowAddCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatColor, setNewCatColor] = useState(CATEGORY_COLORS[0]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; usageCount: number } | null>(null);
+
+  useEffect(() => {
+    setCategories(loadCategories());
+    const handler = () => setCategories(loadCategories());
+    window.addEventListener("habitflow:updated", handler);
+    return () => window.removeEventListener("habitflow:updated", handler);
+  }, []);
+
+  function persistCategories(updated: Category[]) {
+    setCategories(updated);
+    saveCategories(updated);
+    notifyUpdate();
+  }
+
+  function addCategory() {
+    if (!newCatName.trim()) return;
+    persistCategories([
+      ...categories,
+      { id: generateCategoryId(), name: newCatName.trim(), color: newCatColor },
+    ]);
+    setNewCatName("");
+    setNewCatColor(CATEGORY_COLORS[0]);
+    setShowAddCat(false);
+  }
+
+  function saveEditCategory(id: string) {
+    if (!editCatName.trim()) return;
+    persistCategories(categories.map((c) => c.id === id ? { ...c, name: editCatName.trim() } : c));
+    setEditingCatId(null);
+  }
+
+  function requestDelete(id: string) {
+    deleteCategory(id);
+  }
+
+  function deleteCategory(id: string) {
+    persistCategories(categories.filter((c) => c.id !== id));
+    setDeleteConfirm(null);
+  }
+
   return (
     <div className="flex flex-col gap-5 max-w-[800px]">
       {/* Header */}
@@ -45,6 +100,159 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+      </Panel>
+
+      {/* Categories */}
+      <Panel className="flex flex-col">
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle title="Categories" />
+          {!showAddCat && (
+            <button
+              onClick={() => setShowAddCat(true)}
+              className="text-[11px] px-3 py-1.5 rounded-lg bg-violet-600/70 hover:bg-violet-600 transition-colors font-medium"
+            >
+              + Add Category
+            </button>
+          )}
+        </div>
+
+        {/* Add form */}
+        {showAddCat && (
+          <div className="mb-4 flex flex-col gap-3 p-3 rounded-lg bg-white/[0.03] border border-white/[0.07]">
+            <input
+              className="bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-violet-500/50"
+              placeholder="Category name (e.g. Dance Training)"
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addCategory()}
+              autoFocus
+            />
+            <div>
+              <p className="text-[10px] text-white/30 mb-2">Color (optional)</p>
+              <div className="flex gap-2 flex-wrap">
+                {CATEGORY_COLORS.map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => setNewCatColor(c)}
+                    className="w-6 h-6 rounded-full cursor-pointer transition-transform hover:scale-110"
+                    style={{
+                      backgroundColor: c,
+                      outline: newCatColor === c ? `2px solid ${c}` : "none",
+                      outlineOffset: "2px",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={addCategory}
+                className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 transition-colors text-sm font-medium"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => { setShowAddCat(false); setNewCatName(""); }}
+                className="px-4 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] transition-colors text-sm text-white/60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Category list */}
+        {categories.length === 0 && !showAddCat && (
+          <p className="text-[12px] text-white/25 py-3">
+            No categories yet. Add one to organize your habits and routines.
+          </p>
+        )}
+
+        <div className="flex flex-col divide-y divide-white/[0.05]">
+          {categories.map((cat) => {
+            const isEditing = editingCatId === cat.id;
+            return (
+              <div key={cat.id} className="flex items-center gap-3 py-3">
+                <div
+                  className="w-3 h-3 rounded-full shrink-0"
+                  style={{ backgroundColor: cat.color ?? "#8b5cf6" }}
+                />
+                {isEditing ? (
+                  <input
+                    className="flex-1 bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-1.5 text-sm text-white outline-none focus:border-violet-500/50"
+                    value={editCatName}
+                    onChange={(e) => setEditCatName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveEditCategory(cat.id);
+                      if (e.key === "Escape") setEditingCatId(null);
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <span className="flex-1 text-sm text-white/80">{cat.name}</span>
+                )}
+                <div className="flex gap-1.5">
+                  {isEditing ? (
+                    <>
+                      <button
+                        onClick={() => saveEditCategory(cat.id)}
+                        className="text-[10px] px-2.5 py-1 rounded-md bg-violet-600/60 hover:bg-violet-600 text-white/70 hover:text-white transition-colors"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingCatId(null)}
+                        className="text-[10px] px-2.5 py-1 rounded-md bg-white/[0.05] hover:bg-white/[0.1] text-white/40 hover:text-white/70 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => { setEditingCatId(cat.id); setEditCatName(cat.name); }}
+                        className="text-[10px] px-2.5 py-1 rounded-md bg-white/[0.05] hover:bg-white/[0.1] text-white/40 hover:text-white/70 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => requestDelete(cat.id)}
+                        className="text-[10px] px-2.5 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400/60 hover:text-rose-400 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Delete confirmation */}
+        {deleteConfirm && (
+          <div className="mt-3 p-3 rounded-lg bg-rose-500/[0.06] border border-rose-500/20 flex flex-col gap-2.5">
+            <p className="text-[12px] text-white/70">
+              This category is used by{" "}
+              <span className="text-rose-400 font-medium">{deleteConfirm.usageCount} habit{deleteConfirm.usageCount !== 1 ? "s/routines" : "/routine"}</span>.
+              Deleting it will unassign it from all of them.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => deleteCategory(deleteConfirm.id)}
+                className="text-[11px] px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium transition-colors"
+              >
+                Delete &amp; Unassign
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-white/50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </Panel>
 
       {/* Appearance */}
@@ -95,7 +303,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between py-3">
             <div>
               <p className="text-[12px] text-white/70">Storage Key</p>
-              <p className="text-[11px] text-white/25 mt-0.5 font-mono">{STORAGE_KEY}</p>
+              <p className="text-[11px] text-white/25 mt-0.5 font-mono">{"habitflow-habits"}</p>
             </div>
             <span className="text-[10px] text-white/25 bg-white/[0.04] border border-white/[0.07] rounded-full px-2.5 py-1">localStorage</span>
           </div>

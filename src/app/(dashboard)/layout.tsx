@@ -6,7 +6,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen bg-[#07090F] text-white">
       <aside className="w-60 shrink-0 bg-[#0A0D16] border-r border-white/[0.06] flex flex-col">
         <div className="px-5 py-5 border-b border-white/[0.06]">
-          <Link href="/dashboard" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+          <Link href="/weekly" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-xs font-bold">H</div>
             <span className="text-sm font-semibold tracking-tight">HabitFlow</span>
           </Link>

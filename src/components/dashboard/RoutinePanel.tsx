@@ -1,14 +1,12 @@
 "use client";
 
-import type { Habit } from "@/lib/habitData";
-import { MONTH_CONFIG } from "@/lib/habitData";
 import type { Routine, RoutineEntry } from "@/lib/routineData";
+import { MONTH_CONFIG } from "@/lib/habitData";
 import { calcRoutinePct } from "@/lib/routineUtils";
 
 const DOW_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 type Props = {
-  habit: Habit;
   routine: Routine;
   day: number;
   entry: RoutineEntry;
@@ -17,7 +15,6 @@ type Props = {
 };
 
 export default function RoutinePanel({
-  habit,
   routine,
   day,
   entry,
@@ -36,7 +33,7 @@ export default function RoutinePanel({
   const stateColor =
     pct === 100 ? "#10b981" : pct > 0 ? "#f59e0b" : "rgba(255,255,255,0.25)";
   const barColor =
-    pct === 100 ? "#10b981" : pct > 0 ? "#f59e0b" : habit.hex;
+    pct === 100 ? "#10b981" : pct > 0 ? "#f59e0b" : routine.color;
 
   function toggle(subtaskId: string) {
     const ids = entry.completedSubtaskIds;
@@ -56,21 +53,12 @@ export default function RoutinePanel({
     >
       <div className="relative w-full max-w-md bg-[#0C0F1A] border border-white/[0.09] rounded-2xl shadow-2xl overflow-hidden">
         {/* Accent bar */}
-        <div className="h-[3px] w-full" style={{ backgroundColor: habit.hex }} />
+        <div className="h-[3px] w-full" style={{ backgroundColor: routine.color }} />
 
         {/* Header */}
         <div className="px-6 pt-5 pb-4 border-b border-white/[0.06]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: habit.hex }}
-                />
-                <span className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">
-                  {habit.name}
-                </span>
-              </div>
               <h2 className="text-[17px] font-semibold text-white leading-tight">
                 {routine.name}
               </h2>

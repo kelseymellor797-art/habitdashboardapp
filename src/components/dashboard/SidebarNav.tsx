@@ -11,8 +11,10 @@ const VIEWS = [
 ];
 
 const MANAGE = [
-  { label: "Habits",   href: "/habits",   icon: "✦" },
-  { label: "Settings", href: "/settings", icon: "⊙" },
+  { label: "Habits",         href: "/habits",   icon: "✦" },
+  { label: "Routines",       href: "/routines", icon: "◈" },
+  { label: "Dance Training", href: "/dance",    icon: "◇" },
+  { label: "Settings",       href: "/settings", icon: "⊙" },
 ];
 
 function NavItem({ label, href, icon }: { label: string; href: string; icon: string }) {
