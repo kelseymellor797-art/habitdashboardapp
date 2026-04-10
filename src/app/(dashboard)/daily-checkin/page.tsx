@@ -8,7 +8,7 @@ import {
   type DailyCheckIn,
   loadDailyCheckIns,
   saveDailyCheckIns,
-  getTodayCheckIn,
+  getCheckInForDate,
   generateCheckInId,
   todayDateString,
   emptyCheckIn,
@@ -158,7 +158,8 @@ function HistoryRow({ entry }: { entry: DailyCheckIn }) {
 export default function DailyCheckInPage() {
   const [mounted, setMounted] = useState(false);
   const [checkIns, setCheckIns] = useState<DailyCheckIn[]>([]);
-  const [saved, setSaved] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(todayDateString());
+  const [viewMode, setViewMode] = useState<"form" | "saved">("form");
 
   // Form state
   type FormState = {
@@ -175,46 +176,55 @@ export default function DailyCheckInPage() {
     mentalStateNotes: "", wins: "", whatFeltHard: "", goalsForTomorrow: "",
   });
 
+  const formFromEntry = (e: DailyCheckIn): FormState => ({
+    mood: e.mood, energy: e.energy, motivation: e.motivation, confidence: e.confidence,
+    soreness: e.soreness, flexibilityFeeling: e.flexibilityFeeling,
+    strengthFeeling: e.strengthFeeling, trainedToday: e.trainedToday,
+    trainingType: e.trainingType ?? "", trainingDuration: e.trainingDuration ? String(e.trainingDuration) : "",
+    mentalStateNotes: e.mentalStateNotes ?? "", wins: e.wins ?? "",
+    whatFeltHard: e.whatFeltHard ?? "", goalsForTomorrow: e.goalsForTomorrow ?? "",
+  });
+
   const [form, setForm] = useState<FormState>(defaultForm());
 
+  // Load all check-ins on mount
   useEffect(() => {
     const all = loadDailyCheckIns();
     setCheckIns(all);
-    const today = getTodayCheckIn(all);
-    if (today) {
-      setForm({
-        mood: today.mood,
-        energy: today.energy,
-        motivation: today.motivation,
-        confidence: today.confidence,
-        soreness: today.soreness,
-        flexibilityFeeling: today.flexibilityFeeling,
-        strengthFeeling: today.strengthFeeling,
-        trainedToday: today.trainedToday,
-        trainingType: today.trainingType ?? "",
-        trainingDuration: today.trainingDuration ? String(today.trainingDuration) : "",
-        mentalStateNotes: today.mentalStateNotes ?? "",
-        wins: today.wins ?? "",
-        whatFeltHard: today.whatFeltHard ?? "",
-        goalsForTomorrow: today.goalsForTomorrow ?? "",
-      });
+    const existing = getCheckInForDate(all, selectedDate);
+    if (existing) {
+      setForm(formFromEntry(existing));
+      setViewMode("saved");
     }
     setMounted(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When date changes, load that date's data or reset form
+  useEffect(() => {
+    if (!mounted) return;
+    const existing = getCheckInForDate(checkIns, selectedDate);
+    if (existing) {
+      setForm(formFromEntry(existing));
+      setViewMode("saved");
+    } else {
+      setForm(defaultForm());
+      setViewMode("form");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
-    setSaved(false);
   }
 
   function handleSave() {
-    const today = todayDateString();
-    const existing = getTodayCheckIn(checkIns);
+    const existing = getCheckInForDate(checkIns, selectedDate);
     const now = new Date().toISOString();
     const entry: DailyCheckIn = {
       ...emptyCheckIn(),
       id: existing?.id ?? generateCheckInId(),
-      date: today,
+      date: selectedDate,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       mood: form.mood,
@@ -238,8 +248,16 @@ export default function DailyCheckInPage() {
       : [entry, ...checkIns];
     saveDailyCheckIns(updated);
     setCheckIns(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setViewMode("saved");
+  }
+
+  function navigateDate(dir: -1 | 1) {
+    const d = new Date(selectedDate + "T12:00:00");
+    d.setDate(d.getDate() + dir);
+    const next = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    // Don't allow navigating to future dates beyond today
+    if (next > todayDateString()) return;
+    setSelectedDate(next);
   }
 
   if (!mounted) {
@@ -250,29 +268,148 @@ export default function DailyCheckInPage() {
     );
   }
 
-  const today = todayDateString();
-  const todayDate = new Date(today + "T12:00:00");
-  const dateLabel = todayDate.toLocaleDateString("en-US", {
+  const isToday = selectedDate === todayDateString();
+  const selectedDateObj = new Date(selectedDate + "T12:00:00");
+  const dateLabel = selectedDateObj.toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric",
   });
-  const hasExisting = Boolean(getTodayCheckIn(checkIns));
-  const recentHistory = checkIns.filter((c) => c.date !== today).slice(0, 7);
+  const existing = getCheckInForDate(checkIns, selectedDate);
+  const recentHistory = checkIns.filter((c) => c.date !== selectedDate)
+    .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <p className="text-[11px] text-white/25 uppercase tracking-widest mb-1">{dateLabel}</p>
-        <h1 className="text-2xl font-bold text-white">
-          {hasExisting ? "Edit today's check-in ✏️" : "How are you feeling today? 🌿"}
-        </h1>
-        <p className="text-sm text-white/35 mt-1">
-          {hasExisting
-            ? "You already checked in today — update your entry below."
-            : "Take a moment to check in with yourself."}
-        </p>
+
+      {/* Date navigation header */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => navigateDate(-1)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-colors"
+        >
+          ← Prev
+        </button>
+        <div className="text-center">
+          <p className="text-[11px] text-white/25 uppercase tracking-widest">{dateLabel}</p>
+          {!isToday && (
+            <button
+              type="button"
+              onClick={() => setSelectedDate(todayDateString())}
+              className="text-[10px] text-violet-400/70 hover:text-violet-300 mt-0.5 transition-colors"
+            >
+              Back to today
+            </button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => navigateDate(1)}
+          disabled={isToday}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm text-white/40 hover:text-white/70 hover:bg-white/[0.04] transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+        >
+          Next →
+        </button>
       </div>
 
+      {/* ── SAVED VIEW ─────────────────────────────────────────────────── */}
+      {viewMode === "saved" && existing ? (
+        <>
+          {/* Success banner */}
+          <div className="flex items-center justify-between px-5 py-4 rounded-2xl bg-gradient-to-r from-violet-600/20 to-pink-600/15 border border-violet-500/20">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">✅</span>
+              <div>
+                <p className="text-sm font-semibold text-white">Check-in saved</p>
+                <p className="text-[11px] text-white/40">{dateLabel}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewMode("form")}
+              className="px-4 py-2 rounded-xl text-sm font-medium bg-white/[0.07] hover:bg-white/[0.12] text-white/70 transition-colors"
+            >
+              ✏️ Edit
+            </button>
+          </div>
+
+          {/* Summary card */}
+          <Panel>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Feelings row */}
+              <div className="col-span-2">
+                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-3">How you felt</p>
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    { label: "Mood", val: existing.mood, emoji: MOOD_EMOJIS[existing.mood] },
+                    { label: "Energy", val: existing.energy, emoji: ENERGY_EMOJIS[existing.energy] },
+                    { label: "Motivation", val: existing.motivation, emoji: existing.motivation >= 4 ? "🔥" : existing.motivation >= 3 ? "💫" : "😶" },
+                    { label: "Confidence", val: existing.confidence, emoji: existing.confidence >= 4 ? "💫" : existing.confidence >= 3 ? "😊" : "😬" },
+                  ].map(({ label, val, emoji }) => (
+                    <div key={label} className="flex flex-col items-center gap-1 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                      <span className="text-xl">{emoji}</span>
+                      <span className="text-sm font-semibold text-white">{val}/5</span>
+                      <span className="text-[10px] text-white/30">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Body row */}
+              <div className="col-span-2">
+                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-3">Body</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Soreness", val: existing.soreness },
+                    { label: "Flexibility", val: existing.flexibilityFeeling },
+                    { label: "Strength", val: existing.strengthFeeling },
+                  ].map(({ label, val }) => (
+                    <div key={label} className="flex flex-col gap-1.5 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                      <span className="text-[10px] text-white/30">{label}</span>
+                      <div className="flex gap-0.5">
+                        {[1,2,3,4,5].map((n) => (
+                          <div key={n} className={`h-1.5 flex-1 rounded-full ${n <= val ? "bg-violet-500" : "bg-white/[0.07]"}`} />
+                        ))}
+                      </div>
+                      <span className="text-xs font-medium text-white/60">{val}/5</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Training */}
+              {existing.trainedToday && (
+                <div className="col-span-2 flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
+                  <span className="text-lg">💃</span>
+                  <div>
+                    <span className="text-sm font-medium text-white/80">Trained today</span>
+                    {existing.trainingType && (
+                      <span className="ml-2 text-[11px] text-violet-300/70 capitalize">{existing.trainingType}</span>
+                    )}
+                    {existing.trainingDuration && (
+                      <span className="ml-2 text-[11px] text-white/30">{existing.trainingDuration} min</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Reflection snippets */}
+              {existing.wins && (
+                <div className="col-span-2">
+                  <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">Wins 🌟</p>
+                  <p className="text-[13px] text-white/60 leading-relaxed">{existing.wins}</p>
+                </div>
+              )}
+              {existing.goalsForTomorrow && (
+                <div className="col-span-2">
+                  <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">Tomorrow ✨</p>
+                  <p className="text-[13px] text-white/60 leading-relaxed">{existing.goalsForTomorrow}</p>
+                </div>
+              )}
+            </div>
+          </Panel>
+        </>
+      ) : (
+        <>
       {/* Section 1: How I feel */}
       <Panel>
         <SectionTitle title="How I Feel" subtitle="Rate yourself 1 (low) → 5 (high)" />
@@ -411,10 +548,12 @@ export default function DailyCheckInPage() {
         onClick={handleSave}
         className="w-full py-4 rounded-2xl font-semibold text-sm transition-all bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white shadow-lg shadow-violet-900/30 active:scale-[0.98]"
       >
-        {saved ? "✓ Saved!" : hasExisting ? "Update check-in" : "Save today's check-in"}
+        {existing ? "Update check-in" : "Save check-in ✓"}
       </button>
+        </>
+      )}
 
-      {/* History */}
+      {/* History — always visible below */}
       {recentHistory.length > 0 && (
         <div>
           <SectionTitle title="Recent Check-Ins" />
