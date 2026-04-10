@@ -447,6 +447,7 @@ function CheckInTab({
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
+    console.log("[CheckInTab save] weekOf:", weekStart, "scores with non-zero:", scores.filter(s => s.score > 0).length, "existing:", existing?.id ?? "none");
     onSave(checkIn);
     setSaved(true);
   }
@@ -956,11 +957,15 @@ export default function DancePage() {
   }, []);
 
   function handleSaveCheckIn(ci: DanceCheckIn) {
-    const updated = checkIns.some((c) => c.weekOf === ci.weekOf)
-      ? checkIns.map((c) => c.weekOf === ci.weekOf ? ci : c)
-      : [...checkIns, ci];
-    setCheckIns(updated);
-    saveCheckIns(updated);
+    console.log("[handleSaveCheckIn] called with weekOf:", ci.weekOf, "id:", ci.id);
+    setCheckIns((prev) => {
+      const updated = prev.some((c) => c.weekOf === ci.weekOf)
+        ? prev.map((c) => c.weekOf === ci.weekOf ? ci : c)
+        : [...prev, ci];
+      console.log("[handleSaveCheckIn] updated array length:", updated.length);
+      saveCheckIns(updated);
+      return updated;
+    });
   }
 
   function handleSaveDaily(d: DanceDailyStatus) {

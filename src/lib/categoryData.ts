@@ -1,3 +1,5 @@
+import { notifyAppDataUpdated } from "./appEvents";
+
 export type Category = {
   id: string;
   name: string;
@@ -30,4 +32,5 @@ export function loadCategories(): Category[] {
 export function saveCategories(categories: Category[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+  notifyAppDataUpdated();
 }

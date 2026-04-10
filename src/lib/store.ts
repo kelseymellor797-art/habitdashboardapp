@@ -1,4 +1,5 @@
 // Central data store for HabitFlow — all persistence via localStorage
+import { notifyAppDataUpdated } from "./appEvents";
 
 export type ScheduleType = "daily" | "weekly" | "custom";
 
@@ -80,6 +81,7 @@ export function loadHabits(): Habit[] {
 export function saveHabits(habits: Habit[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(HABITS_KEY, JSON.stringify(habits));
+  notifyAppDataUpdated();
 }
 
 export function loadCompletions(): Completion[] {
@@ -115,6 +117,7 @@ export function saveCompletions(completions: Completion[]): void {
     byDate[c.date].push(c.habitId);
   }
   localStorage.setItem(COMPLETIONS_KEY, JSON.stringify({ completions: byDate }));
+  notifyAppDataUpdated();
 }
 
 /** Toggle a completion for a habit on a date. Returns new completions array. */
@@ -149,7 +152,5 @@ export function getMonthCompletionSet(completions: Completion[], habitId: string
 
 /** Dispatch event so all listeners re-read from localStorage */
 export function notifyUpdate(): void {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("habitflow:updated"));
-  }
+  notifyAppDataUpdated();
 }

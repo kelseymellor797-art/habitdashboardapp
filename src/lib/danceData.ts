@@ -1,3 +1,5 @@
+import { notifyAppDataUpdated } from "./appEvents";
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export type ScoreValue = 0 | 1 | 2 | 3;
@@ -150,13 +152,24 @@ export function loadCheckIns(): DanceCheckIn[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(DANCE_CHECKINS_KEY);
-    return raw ? (JSON.parse(raw) as DanceCheckIn[]) : [];
-  } catch { return []; }
+    const result = raw ? (JSON.parse(raw) as DanceCheckIn[]) : [];
+    console.log("[loadCheckIns] loaded", result.length, "entries from", DANCE_CHECKINS_KEY);
+    return result;
+  } catch (e) {
+    console.error("[loadCheckIns] parse error:", e);
+    return [];
+  }
 }
 
 export function saveCheckIns(checkIns: DanceCheckIn[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(DANCE_CHECKINS_KEY, JSON.stringify(checkIns));
+  try {
+    localStorage.setItem(DANCE_CHECKINS_KEY, JSON.stringify(checkIns));
+    notifyAppDataUpdated();
+    console.log("[saveCheckIns] saved", checkIns.length, "entries to", DANCE_CHECKINS_KEY);
+  } catch (e) {
+    console.error("[saveCheckIns] FAILED to save:", e);
+  }
 }
 
 export function loadDailyStatuses(): DanceDailyStatus[] {
@@ -170,6 +183,7 @@ export function loadDailyStatuses(): DanceDailyStatus[] {
 export function saveDailyStatuses(statuses: DanceDailyStatus[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(DANCE_DAILY_KEY, JSON.stringify(statuses));
+  notifyAppDataUpdated();
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────────────

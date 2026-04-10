@@ -1,3 +1,5 @@
+import { notifyAppDataUpdated } from "./appEvents";
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type SkillMilestoneStatus =
@@ -258,14 +260,20 @@ export function loadSkills(): DanceSkill[] {
   } catch { return SEED_SKILLS; }
 }
 export function saveSkills(skills: DanceSkill[]): void {
-  if (typeof window !== 'undefined') localStorage.setItem(SKILLS_KEY, JSON.stringify(skills));
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(SKILLS_KEY, JSON.stringify(skills));
+    notifyAppDataUpdated();
+  }
 }
 export function loadSkillLogs(): DanceSkillLog[] {
   if (typeof window === 'undefined') return [];
   try { return JSON.parse(localStorage.getItem(SKILL_LOGS_KEY) ?? '[]'); } catch { return []; }
 }
 export function saveSkillLogs(logs: DanceSkillLog[]): void {
-  if (typeof window !== 'undefined') localStorage.setItem(SKILL_LOGS_KEY, JSON.stringify(logs));
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(SKILL_LOGS_KEY, JSON.stringify(logs));
+    notifyAppDataUpdated();
+  }
 }
 
 // ── Skill analytics helpers ───────────────────────────────────────────────────

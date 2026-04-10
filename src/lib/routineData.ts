@@ -1,4 +1,5 @@
 import { type ScheduleType } from "./store";
+import { notifyAppDataUpdated } from "./appEvents";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,7 @@ export function loadRoutines(): Routine[] {
 export function saveRoutines(routines: Routine[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(ROUTINES_KEY, JSON.stringify(routines));
+  notifyAppDataUpdated();
 }
 
 export function loadRoutineEntries(): Record<string, RoutineEntry> {
@@ -95,4 +97,5 @@ export function saveRoutineEntries(entries: Record<string, RoutineEntry>): void 
     Object.entries(entries).map(([k, v]) => [k, v.completedSubtaskIds])
   );
   localStorage.setItem(ROUTINE_ENTRIES_KEY, JSON.stringify(serialized));
+  notifyAppDataUpdated();
 }
