@@ -411,6 +411,17 @@ function CheckInTab({
   const [expandedCats, setExpandedCats] = useState<Set<DanceCategoryKey>>(new Set(["strength"]));
   const [saved, setSaved]           = useState(false);
 
+  // On first mount checkIns is [] (parent useEffect hasn't fired yet).
+  // Once localStorage data loads and existing transitions from undefined → found,
+  // sync local form state so the user sees their saved scores.
+  useEffect(() => {
+    if (existing) {
+      setScores(existing.scores);
+      setReflection(existing.reflection);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing?.id]);
+
   function setScore(itemId: string, score: ScoreValue) {
     setScores((prev) =>
       prev.map((s) => s.itemId === itemId ? { ...s, score } : s)
@@ -868,13 +879,15 @@ function HistoryTab({
                   )}
                 </div>
               </div>
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={(e) => { e.stopPropagation(); onEdit(ci.weekOf); }}
-                className="text-[10px] px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white/40 hover:text-white/70 transition-colors mr-2"
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); onEdit(ci.weekOf); } }}
+                className="text-[10px] px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white/40 hover:text-white/70 transition-colors mr-2 cursor-pointer"
               >
                 Edit
-              </button>
+              </div>
               <span className="text-white/20 text-sm">{isOpen ? "▲" : "▼"}</span>
             </button>
 

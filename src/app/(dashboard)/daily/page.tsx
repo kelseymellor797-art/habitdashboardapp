@@ -23,8 +23,6 @@ const todayWeekday = (startDow + todayDay - 1) % 7;
 const todayDOW = DOW_FULL_LABELS[todayWeekday];
 // Suppress unused-var lint warning — kept for potential use
 void todayDOW;
-const todayDateStr = new Date(year, month - 1, todayDay)
-  .toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" });
 
 type HabitState   = { habit: Habit; isComplete: boolean };
 type RoutineState = { routine: Routine; entry: RoutineEntry; pct: number; isComplete: boolean };
@@ -37,8 +35,15 @@ export default function DailyPage() {
   const [routineEntries, setRoutineEntries] = useState<Record<string, RoutineEntry>>({});
   const [categories,     setCategories]     = useState<Category[]>([]);
   const [activeRoutineId, setActiveRoutineId] = useState<string | null>(null);
+  // Computed client-side to avoid SSR/client hydration mismatch on date strings
+  const [todayDateStr, setTodayDateStr] = useState("");
 
   useEffect(() => {
+    setTodayDateStr(
+      new Date(year, month - 1, todayDay).toLocaleDateString("en-US", {
+        weekday: "long", month: "short", day: "numeric", year: "numeric",
+      })
+    );
     setHabits(loadHabits());
     setRoutines(loadRoutines());
     setCompletions(loadCompletions());
