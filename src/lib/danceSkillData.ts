@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,37 @@ export const MILESTONE_STATUSES: {
 
 const SKILLS_KEY     = 'danceflow-skills';
 const SKILL_LOGS_KEY = 'danceflow-skill-logs';
+
+type DanceSkillRow = {
+  id: string;
+  name: string;
+  category: SkillCategory;
+  tags: string[] | null;
+  notes: string | null;
+  active: boolean;
+  current_status: SkillMilestoneStatus;
+  date_created: string;
+  date_first_landed: string | null;
+  needs_spotting: boolean | null;
+  needs_conditioning: boolean | null;
+  needs_flexibility: boolean | null;
+  mentally_blocked: boolean | null;
+};
+
+type DanceSkillLogRow = {
+  id: string;
+  skill_id: string;
+  date: string;
+  confidence_before: number;
+  confidence_after: number | null;
+  fear_level: number | null;
+  form_quality: number | null;
+  effort_level: number | null;
+  outcome: SkillMilestoneStatus;
+  attempted: boolean;
+  notes: string | null;
+  filmed: boolean | null;
+};
 
 export function generateSkillId(): string {
   return `skill-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -245,6 +277,107 @@ export const SEED_SKILLS: DanceSkill[] = [
   makeSeed('cnd-10',  'One-arm assisted pulls', 'conditioning'),
 ];
 
+function readSkillsCache(): DanceSkill[] {
+  if (typeof window === 'undefined') return SEED_SKILLS;
+  try {
+    const raw = localStorage.getItem(SKILLS_KEY);
+    return raw ? (JSON.parse(raw) as DanceSkill[]) : [];
+  } catch {
+    return SEED_SKILLS;
+  }
+}
+
+function writeSkillsCache(skills: DanceSkill[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(SKILLS_KEY, JSON.stringify(skills));
+  }
+}
+
+function readSkillLogsCache(): DanceSkillLog[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(localStorage.getItem(SKILL_LOGS_KEY) ?? '[]') as DanceSkillLog[];
+  } catch {
+    return [];
+  }
+}
+
+function writeSkillLogsCache(logs: DanceSkillLog[]): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(SKILL_LOGS_KEY, JSON.stringify(logs));
+  }
+}
+
+function skillFromRow(row: DanceSkillRow): DanceSkill {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    tags: row.tags ?? undefined,
+    notes: row.notes ?? undefined,
+    active: row.active,
+    currentStatus: row.current_status,
+    dateCreated: row.date_created,
+    dateFirstLanded: row.date_first_landed ?? undefined,
+    needsSpotting: row.needs_spotting ?? undefined,
+    needsConditioning: row.needs_conditioning ?? undefined,
+    needsFlexibility: row.needs_flexibility ?? undefined,
+    mentallyBlocked: row.mentally_blocked ?? undefined,
+  };
+}
+
+function skillToRow(skill: DanceSkill): DanceSkillRow {
+  return {
+    id: skill.id,
+    name: skill.name,
+    category: skill.category,
+    tags: skill.tags ?? null,
+    notes: skill.notes ?? null,
+    active: skill.active,
+    current_status: skill.currentStatus,
+    date_created: skill.dateCreated,
+    date_first_landed: skill.dateFirstLanded ?? null,
+    needs_spotting: skill.needsSpotting ?? null,
+    needs_conditioning: skill.needsConditioning ?? null,
+    needs_flexibility: skill.needsFlexibility ?? null,
+    mentally_blocked: skill.mentallyBlocked ?? null,
+  };
+}
+
+function logFromRow(row: DanceSkillLogRow): DanceSkillLog {
+  return {
+    id: row.id,
+    skillId: row.skill_id,
+    date: row.date,
+    confidenceBefore: row.confidence_before,
+    confidenceAfter: row.confidence_after ?? undefined,
+    fearLevel: row.fear_level ?? undefined,
+    formQuality: row.form_quality ?? undefined,
+    effortLevel: row.effort_level ?? undefined,
+    outcome: row.outcome,
+    attempted: row.attempted,
+    notes: row.notes ?? undefined,
+    filmed: row.filmed ?? undefined,
+  };
+}
+
+function logToRow(log: DanceSkillLog): DanceSkillLogRow {
+  return {
+    id: log.id,
+    skill_id: log.skillId,
+    date: log.date,
+    confidence_before: log.confidenceBefore,
+    confidence_after: log.confidenceAfter ?? null,
+    fear_level: log.fearLevel ?? null,
+    form_quality: log.formQuality ?? null,
+    effort_level: log.effortLevel ?? null,
+    outcome: log.outcome,
+    attempted: log.attempted,
+    notes: log.notes ?? null,
+    filmed: log.filmed ?? null,
+  };
+}
+
 // ── Storage functions ─────────────────────────────────────────────────────────
 
 export function loadSkills(): DanceSkill[] {
@@ -254,24 +387,58 @@ export function loadSkills(): DanceSkill[] {
     // Seed on first visit (key never set)
     if (raw === null) {
       localStorage.setItem(SKILLS_KEY, JSON.stringify(SEED_SKILLS));
+      syncCollection({
+        key: SKILLS_KEY,
+        table: "dance_skills",
+        localData: SEED_SKILLS,
+        readCache: readSkillsCache,
+        writeCache: writeSkillsCache,
+        fromRow: skillFromRow,
+        toRow: skillToRow,
+        orderBy: "date_created",
+      });
       return SEED_SKILLS;
     }
-    return JSON.parse(raw);
+    const skills = JSON.parse(raw) as DanceSkill[];
+    syncCollection({
+      key: SKILLS_KEY,
+      table: "dance_skills",
+      localData: skills,
+      readCache: readSkillsCache,
+      writeCache: writeSkillsCache,
+      fromRow: skillFromRow,
+      toRow: skillToRow,
+      orderBy: "date_created",
+    });
+    return skills;
   } catch { return SEED_SKILLS; }
 }
 export function saveSkills(skills: DanceSkill[]): void {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(SKILLS_KEY, JSON.stringify(skills));
+    writeSkillsCache(skills);
+    saveRemoteCollectionById("dance_skills", "id", skills, (skill) => skill.id, skillToRow);
     notifyAppDataUpdated();
   }
 }
 export function loadSkillLogs(): DanceSkillLog[] {
   if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(SKILL_LOGS_KEY) ?? '[]'); } catch { return []; }
+  const logs = readSkillLogsCache();
+  syncCollection({
+    key: SKILL_LOGS_KEY,
+    table: "dance_skill_logs",
+    localData: logs,
+    readCache: readSkillLogsCache,
+    writeCache: writeSkillLogsCache,
+    fromRow: logFromRow,
+    toRow: logToRow,
+    orderBy: "date",
+  });
+  return logs;
 }
 export function saveSkillLogs(logs: DanceSkillLog[]): void {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(SKILL_LOGS_KEY, JSON.stringify(logs));
+    writeSkillLogsCache(logs);
+    saveRemoteCollectionById("dance_skill_logs", "id", logs, (log) => log.id, logToRow);
     notifyAppDataUpdated();
   }
 }

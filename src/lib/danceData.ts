@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -148,41 +149,145 @@ export const DANCE_ITEMS: DanceChecklistItem[] = [
 export const DANCE_CHECKINS_KEY = "danceflow-checkins";
 export const DANCE_DAILY_KEY    = "danceflow-daily";
 
-export function loadCheckIns(): DanceCheckIn[] {
+type DanceCheckInRow = {
+  id: string;
+  week_of: string;
+  scores: DanceChecklistScore[];
+  reflection: DanceReflection;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type DanceDailyStatusRow = {
+  date: string;
+  mood: number;
+  soreness: number;
+  confidence: number;
+  trained_today: boolean;
+  notes: string | null;
+};
+
+function readCheckInsCache(): DanceCheckIn[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(DANCE_CHECKINS_KEY);
-    const result = raw ? (JSON.parse(raw) as DanceCheckIn[]) : [];
-    console.log("[loadCheckIns] loaded", result.length, "entries from", DANCE_CHECKINS_KEY);
-    return result;
-  } catch (e) {
-    console.error("[loadCheckIns] parse error:", e);
+    return raw ? (JSON.parse(raw) as DanceCheckIn[]) : [];
+  } catch {
     return [];
   }
 }
 
-export function saveCheckIns(checkIns: DanceCheckIn[]): void {
+function writeCheckInsCache(checkIns: DanceCheckIn[]): void {
   if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(DANCE_CHECKINS_KEY, JSON.stringify(checkIns));
-    notifyAppDataUpdated();
-    console.log("[saveCheckIns] saved", checkIns.length, "entries to", DANCE_CHECKINS_KEY);
-  } catch (e) {
-    console.error("[saveCheckIns] FAILED to save:", e);
-  }
+  localStorage.setItem(DANCE_CHECKINS_KEY, JSON.stringify(checkIns));
 }
 
-export function loadDailyStatuses(): DanceDailyStatus[] {
+function readDailyStatusesCache(): DanceDailyStatus[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(DANCE_DAILY_KEY);
     return raw ? (JSON.parse(raw) as DanceDailyStatus[]) : [];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
+}
+
+function writeDailyStatusesCache(statuses: DanceDailyStatus[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(DANCE_DAILY_KEY, JSON.stringify(statuses));
+}
+
+function checkInFromRow(row: DanceCheckInRow): DanceCheckIn {
+  return {
+    id: row.id,
+    weekOf: row.week_of,
+    scores: row.scores ?? [],
+    reflection: row.reflection ?? emptyReflection(),
+    createdAt: row.created_at ?? new Date().toISOString(),
+    updatedAt: row.updated_at ?? new Date().toISOString(),
+  };
+}
+
+function checkInToRow(checkIn: DanceCheckIn): DanceCheckInRow {
+  return {
+    id: checkIn.id,
+    week_of: checkIn.weekOf,
+    scores: checkIn.scores,
+    reflection: checkIn.reflection,
+    created_at: checkIn.createdAt,
+    updated_at: checkIn.updatedAt,
+  };
+}
+
+function dailyStatusFromRow(row: DanceDailyStatusRow): DanceDailyStatus {
+  return {
+    date: row.date,
+    mood: row.mood,
+    soreness: row.soreness,
+    confidence: row.confidence,
+    trainedToday: row.trained_today,
+    notes: row.notes ?? "",
+  };
+}
+
+function dailyStatusToRow(status: DanceDailyStatus): DanceDailyStatusRow {
+  return {
+    date: status.date,
+    mood: status.mood,
+    soreness: status.soreness,
+    confidence: status.confidence,
+    trained_today: status.trainedToday,
+    notes: status.notes,
+  };
+}
+
+export function loadCheckIns(): DanceCheckIn[] {
+  if (typeof window === "undefined") return [];
+  const checkIns = readCheckInsCache();
+  syncCollection({
+    key: DANCE_CHECKINS_KEY,
+    table: "dance_checkins",
+    localData: checkIns,
+    readCache: readCheckInsCache,
+    writeCache: writeCheckInsCache,
+    fromRow: checkInFromRow,
+    toRow: checkInToRow,
+    orderBy: "week_of",
+  });
+  return checkIns;
+}
+
+export function saveCheckIns(checkIns: DanceCheckIn[]): void {
+  if (typeof window === "undefined") return;
+  writeCheckInsCache(checkIns);
+  saveRemoteCollectionById("dance_checkins", "id", checkIns, (checkIn) => checkIn.id, checkInToRow, {
+    onConflict: "user_id,week_of",
+  });
+  notifyAppDataUpdated();
+}
+
+export function loadDailyStatuses(): DanceDailyStatus[] {
+  if (typeof window === "undefined") return [];
+  const statuses = readDailyStatusesCache();
+  syncCollection({
+    key: DANCE_DAILY_KEY,
+    table: "dance_daily_statuses",
+    localData: statuses,
+    readCache: readDailyStatusesCache,
+    writeCache: writeDailyStatusesCache,
+    fromRow: dailyStatusFromRow,
+    toRow: dailyStatusToRow,
+    orderBy: "date",
+  });
+  return statuses;
 }
 
 export function saveDailyStatuses(statuses: DanceDailyStatus[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(DANCE_DAILY_KEY, JSON.stringify(statuses));
+  writeDailyStatusesCache(statuses);
+  saveRemoteCollectionById("dance_daily_statuses", "date", statuses, (status) => status.date, dailyStatusToRow, {
+    onConflict: "user_id,date",
+  });
   notifyAppDataUpdated();
 }
 

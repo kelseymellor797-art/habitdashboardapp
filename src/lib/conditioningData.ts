@@ -1,3 +1,6 @@
+import { notifyAppDataUpdated } from "./appEvents";
+import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
+
 export type MuscleGroup =
   | 'core' | 'upper_body' | 'lower_body' | 'full_body'
   | 'shoulders' | 'back' | 'legs' | 'flexibility' | 'cardio';
@@ -37,6 +40,30 @@ export interface ConditioningSession {
 
 const ROUTINES_KEY = "wellness-conditioning-routines";
 const SESSIONS_KEY = "wellness-conditioning-sessions";
+
+type ConditioningRoutineRow = {
+  id: string;
+  name: string;
+  category: MuscleGroup;
+  exercises: Exercise[];
+  estimated_duration: number | null;
+  difficulty: 1 | 2 | 3 | 4 | 5;
+  notes: string | null;
+  active: boolean;
+  created_at: string | null;
+};
+
+type ConditioningSessionRow = {
+  id: string;
+  routine_id: string | null;
+  routine_name: string;
+  date: string;
+  duration: number | null;
+  completed_exercises: string[];
+  difficulty: 1 | 2 | 3 | 4 | 5;
+  notes: string | null;
+  created_at: string | null;
+};
 
 export function todayDateString(): string {
   const d = new Date();
@@ -109,27 +136,22 @@ const DEFAULT_ROUTINES: ConditioningRoutine[] = [
   },
 ];
 
-export function loadConditioningRoutines(): ConditioningRoutine[] {
+function readRoutinesCache(): ConditioningRoutine[] {
   if (typeof window === "undefined") return DEFAULT_ROUTINES;
   try {
     const raw = localStorage.getItem(ROUTINES_KEY);
-    if (raw === null) {
-      // First visit — seed defaults
-      localStorage.setItem(ROUTINES_KEY, JSON.stringify(DEFAULT_ROUTINES));
-      return DEFAULT_ROUTINES;
-    }
-    return JSON.parse(raw) as ConditioningRoutine[];
+    return raw ? (JSON.parse(raw) as ConditioningRoutine[]) : [];
   } catch {
     return DEFAULT_ROUTINES;
   }
 }
 
-export function saveConditioningRoutines(r: ConditioningRoutine[]): void {
+function writeRoutinesCache(routines: ConditioningRoutine[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(ROUTINES_KEY, JSON.stringify(r));
+  localStorage.setItem(ROUTINES_KEY, JSON.stringify(routines));
 }
 
-export function loadConditioningSessions(): ConditioningSession[] {
+function readSessionsCache(): ConditioningSession[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(SESSIONS_KEY);
@@ -139,7 +161,129 @@ export function loadConditioningSessions(): ConditioningSession[] {
   }
 }
 
+function writeSessionsCache(sessions: ConditioningSession[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
+
+function routineFromRow(row: ConditioningRoutineRow): ConditioningRoutine {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    exercises: row.exercises ?? [],
+    estimatedDuration: row.estimated_duration ?? undefined,
+    difficulty: row.difficulty,
+    notes: row.notes ?? undefined,
+    active: row.active,
+    createdAt: row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function routineToRow(routine: ConditioningRoutine): ConditioningRoutineRow {
+  return {
+    id: routine.id,
+    name: routine.name,
+    category: routine.category,
+    exercises: routine.exercises,
+    estimated_duration: routine.estimatedDuration ?? null,
+    difficulty: routine.difficulty,
+    notes: routine.notes ?? null,
+    active: routine.active,
+    created_at: routine.createdAt,
+  };
+}
+
+function sessionFromRow(row: ConditioningSessionRow): ConditioningSession {
+  return {
+    id: row.id,
+    routineId: row.routine_id ?? undefined,
+    routineName: row.routine_name,
+    date: row.date,
+    duration: row.duration ?? undefined,
+    completedExercises: row.completed_exercises ?? [],
+    difficulty: row.difficulty,
+    notes: row.notes ?? undefined,
+    createdAt: row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function sessionToRow(session: ConditioningSession): ConditioningSessionRow {
+  return {
+    id: session.id,
+    routine_id: session.routineId ?? null,
+    routine_name: session.routineName,
+    date: session.date,
+    duration: session.duration ?? null,
+    completed_exercises: session.completedExercises,
+    difficulty: session.difficulty,
+    notes: session.notes ?? null,
+    created_at: session.createdAt,
+  };
+}
+
+export function loadConditioningRoutines(): ConditioningRoutine[] {
+  if (typeof window === "undefined") return DEFAULT_ROUTINES;
+  try {
+    const raw = localStorage.getItem(ROUTINES_KEY);
+    if (raw === null) {
+      // First visit — seed defaults
+      localStorage.setItem(ROUTINES_KEY, JSON.stringify(DEFAULT_ROUTINES));
+      syncCollection({
+        key: ROUTINES_KEY,
+        table: "conditioning_routines",
+        localData: DEFAULT_ROUTINES,
+        readCache: readRoutinesCache,
+        writeCache: writeRoutinesCache,
+        fromRow: routineFromRow,
+        toRow: routineToRow,
+        orderBy: "created_at",
+      });
+      return DEFAULT_ROUTINES;
+    }
+    const routines = JSON.parse(raw) as ConditioningRoutine[];
+    syncCollection({
+      key: ROUTINES_KEY,
+      table: "conditioning_routines",
+      localData: routines,
+      readCache: readRoutinesCache,
+      writeCache: writeRoutinesCache,
+      fromRow: routineFromRow,
+      toRow: routineToRow,
+      orderBy: "created_at",
+    });
+    return routines;
+  } catch {
+    return DEFAULT_ROUTINES;
+  }
+}
+
+export function saveConditioningRoutines(r: ConditioningRoutine[]): void {
+  if (typeof window === "undefined") return;
+  writeRoutinesCache(r);
+  saveRemoteCollectionById("conditioning_routines", "id", r, (routine) => routine.id, routineToRow);
+  notifyAppDataUpdated();
+}
+
+export function loadConditioningSessions(): ConditioningSession[] {
+  if (typeof window === "undefined") return [];
+  const sessions = readSessionsCache();
+  syncCollection({
+    key: SESSIONS_KEY,
+    table: "conditioning_sessions",
+    localData: sessions,
+    readCache: readSessionsCache,
+    writeCache: writeSessionsCache,
+    fromRow: sessionFromRow,
+    toRow: sessionToRow,
+    orderBy: "date",
+  });
+  return sessions;
+}
+
 export function saveConditioningSessions(s: ConditioningSession[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(s));
+  writeSessionsCache(s);
+  saveRemoteCollectionById("conditioning_sessions", "id", s, (session) => session.id, sessionToRow);
+  notifyAppDataUpdated();
 }

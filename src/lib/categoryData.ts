@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 export type Category = {
   id: string;
@@ -18,19 +19,62 @@ export function generateCategoryId(): string {
   return `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function loadCategories(): Category[] {
+type CategoryRow = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
+function readCategoriesCache(): Category[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(CATEGORIES_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as Category[];
+    return raw ? (JSON.parse(raw) as Category[]) : [];
   } catch {
     return [];
   }
 }
 
-export function saveCategories(categories: Category[]): void {
+function writeCategoriesCache(categories: Category[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+}
+
+function categoryFromRow(row: CategoryRow): Category {
+  return {
+    id: row.id,
+    name: row.name,
+    color: row.color ?? undefined,
+  };
+}
+
+function categoryToRow(category: Category): CategoryRow {
+  return {
+    id: category.id,
+    name: category.name,
+    color: category.color ?? null,
+  };
+}
+
+export function loadCategories(): Category[] {
+  if (typeof window === "undefined") return [];
+  const categories = readCategoriesCache();
+  syncCollection({
+    key: CATEGORIES_KEY,
+    table: "categories",
+    localData: categories,
+    readCache: readCategoriesCache,
+    writeCache: writeCategoriesCache,
+    fromRow: categoryFromRow,
+    toRow: categoryToRow,
+    orderBy: "created_at",
+  });
+  return categories;
+}
+
+export function saveCategories(categories: Category[]): void {
+  if (typeof window === "undefined") return;
+  writeCategoriesCache(categories);
+  saveRemoteCollectionById("categories", "id", categories, (category) => category.id, categoryToRow);
   notifyAppDataUpdated();
 }

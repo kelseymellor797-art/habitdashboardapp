@@ -1,5 +1,6 @@
 // Central data store for HabitFlow — all persistence via localStorage
 import { notifyAppDataUpdated } from "./appEvents";
+import { saveRemoteCollection, saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 export type ScheduleType = "daily" | "weekly" | "custom";
 
@@ -27,6 +28,112 @@ export type Completion = {
 export const HABITS_KEY = "habitflow-habits";
 export const COMPLETIONS_KEY = "habitflow-completions";
 
+type HabitRow = {
+  id: string;
+  name: string;
+  schedule_type: ScheduleType;
+  custom_days: number[] | null;
+  goal: number;
+  color: string | null;
+  active: boolean;
+  category_id: string | null;
+  created_at: string | null;
+};
+
+type CompletionRow = {
+  id?: string;
+  habit_id: string;
+  date: string;
+  value: number;
+};
+
+function readHabitsCache(): Habit[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(HABITS_KEY);
+    return raw ? (JSON.parse(raw) as Habit[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHabitsCache(habits: Habit[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(HABITS_KEY, JSON.stringify(habits));
+}
+
+function readCompletionsCache(): Completion[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(COMPLETIONS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { completions?: Record<string, string[]> } | Completion[];
+    if (!Array.isArray(parsed) && parsed.completions) {
+      const result: Completion[] = [];
+      for (const [date, habitIds] of Object.entries(parsed.completions)) {
+        for (const habitId of habitIds) {
+          result.push({ habitId, date, value: 1 });
+        }
+      }
+      return result;
+    }
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCompletionsCache(completions: Completion[]): void {
+  if (typeof window === "undefined") return;
+  const byDate: Record<string, string[]> = {};
+  for (const c of completions) {
+    if (c.value !== 1) continue;
+    if (!byDate[c.date]) byDate[c.date] = [];
+    byDate[c.date].push(c.habitId);
+  }
+  localStorage.setItem(COMPLETIONS_KEY, JSON.stringify({ completions: byDate }));
+}
+
+function habitFromRow(row: HabitRow): Habit {
+  return {
+    id: row.id,
+    name: row.name,
+    scheduleType: row.schedule_type,
+    customDays: row.custom_days ?? undefined,
+    goal: row.goal,
+    color: row.color ?? "#8b5cf6",
+    active: row.active,
+    categoryId: row.category_id ?? undefined,
+    createdAt: row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function habitToRow(habit: Habit): HabitRow {
+  return {
+    id: habit.id,
+    name: habit.name,
+    schedule_type: habit.scheduleType,
+    custom_days: habit.customDays ?? null,
+    goal: habit.goal,
+    color: habit.color,
+    active: habit.active !== false,
+    category_id: habit.categoryId ?? null,
+    created_at: habit.createdAt,
+  };
+}
+
+function completionFromRow(row: CompletionRow): Completion {
+  return { habitId: row.habit_id, date: row.date, value: row.value };
+}
+
+function completionToRow(completion: Completion): CompletionRow {
+  return {
+    habit_id: completion.habitId,
+    date: completion.date,
+    value: completion.value,
+  };
+}
+
 export function generateId(): string {
   return `h-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -43,7 +150,19 @@ export function loadHabits(): Habit[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(HABITS_KEY);
-    if (!raw) return [];
+    if (!raw) {
+      syncCollection({
+        key: HABITS_KEY,
+        table: "habits",
+        localData: [],
+        readCache: readHabitsCache,
+        writeCache: writeHabitsCache,
+        fromRow: habitFromRow,
+        toRow: habitToRow,
+        orderBy: "created_at",
+      });
+      return [];
+    }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     // Migrate old format (has 'hex' instead of 'color')
@@ -72,7 +191,18 @@ export function loadHabits(): Habit[] {
       saveHabits(migrated);
       return migrated;
     }
-    return parsed as Habit[];
+    const habits = parsed as Habit[];
+    syncCollection({
+      key: HABITS_KEY,
+      table: "habits",
+      localData: habits,
+      readCache: readHabitsCache,
+      writeCache: writeHabitsCache,
+      fromRow: habitFromRow,
+      toRow: habitToRow,
+      orderBy: "created_at",
+    });
+    return habits;
   } catch {
     return [];
   }
@@ -80,29 +210,26 @@ export function loadHabits(): Habit[] {
 
 export function saveHabits(habits: Habit[]): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(HABITS_KEY, JSON.stringify(habits));
+  writeHabitsCache(habits);
+  saveRemoteCollectionById("habits", "id", habits, (habit) => habit.id, habitToRow);
   notifyAppDataUpdated();
 }
 
 export function loadCompletions(): Completion[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(COMPLETIONS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { completions?: Record<string, string[]> } | Completion[];
-    // New format: { "completions": { "2025-01-01": ["habitId1", ...] } }
-    if (!Array.isArray(parsed) && parsed.completions) {
-      const result: Completion[] = [];
-      for (const [date, habitIds] of Object.entries(parsed.completions)) {
-        for (const habitId of habitIds) {
-          result.push({ habitId, date, value: 1 });
-        }
-      }
-      return result;
-    }
-    // Legacy: flat array format — migrate transparently
-    if (Array.isArray(parsed)) return parsed as Completion[];
-    return [];
+    const completions = readCompletionsCache();
+    syncCollection({
+      key: COMPLETIONS_KEY,
+      table: "habit_completions",
+      localData: completions,
+      readCache: readCompletionsCache,
+      writeCache: writeCompletionsCache,
+      fromRow: completionFromRow,
+      toRow: completionToRow,
+      orderBy: "date",
+    });
+    return completions;
   } catch {
     return [];
   }
@@ -110,13 +237,8 @@ export function loadCompletions(): Completion[] {
 
 export function saveCompletions(completions: Completion[]): void {
   if (typeof window === "undefined") return;
-  const byDate: Record<string, string[]> = {};
-  for (const c of completions) {
-    if (c.value !== 1) continue;
-    if (!byDate[c.date]) byDate[c.date] = [];
-    byDate[c.date].push(c.habitId);
-  }
-  localStorage.setItem(COMPLETIONS_KEY, JSON.stringify({ completions: byDate }));
+  writeCompletionsCache(completions);
+  saveRemoteCollection("habit_completions", completions, completionToRow);
   notifyAppDataUpdated();
 }
 

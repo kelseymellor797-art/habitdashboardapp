@@ -160,17 +160,17 @@ function OverviewTab({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Week header */}
+      {/* Check-in header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[11px] text-white/30 uppercase tracking-widest">Current week</p>
+          <p className="text-[11px] text-white/30 uppercase tracking-widest">Training check-in</p>
           <p className="text-lg font-semibold mt-0.5">{formatWeekRange(weekStart)}</p>
         </div>
         <button
           onClick={onStartCheckIn}
           className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:opacity-90 text-sm font-semibold transition-opacity shadow-lg shadow-violet-900/30"
         >
-          {thisWeek ? "✏️ Edit check-in" : "✦ Complete weekly check-in"}
+          {thisWeek ? "✏️ Edit check-in" : "✦ Complete daily check-in"}
         </button>
       </div>
 
@@ -192,7 +192,7 @@ function OverviewTab({
               onClick={onStartCheckIn}
               className="mt-2 px-5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-sm font-semibold hover:opacity-90 transition-opacity"
             >
-              Start weekly check-in
+              Start daily check-in
             </button>
           </div>
         </Panel>
@@ -202,7 +202,7 @@ function OverviewTab({
       {thisWeek && (
         <div className="grid grid-cols-3 gap-3">
           <Panel className="flex flex-col gap-1 text-center">
-            <p className="text-[10px] text-white/25 uppercase tracking-widest">Weekly avg</p>
+            <p className="text-[10px] text-white/25 uppercase tracking-widest">Check-in avg</p>
             <p className="text-3xl font-bold text-violet-400 tabular-nums">{weekAvg?.toFixed(1)}</p>
             <p className="text-[11px] text-white/40">{getScoreLabel(weekAvg ?? 0)}</p>
           </Panel>
@@ -325,7 +325,7 @@ function OverviewTab({
       {/* Latest reflection */}
       {thisWeek && (thisWeek.reflection.wins || thisWeek.reflection.evidenceOfProgress) && (
         <Panel>
-          <SectionTitle title="This Week's Reflection" />
+          <SectionTitle title="Training Reflection" />
           <div className="grid grid-cols-2 gap-3">
             {thisWeek.reflection.wins && (
               <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
@@ -467,7 +467,7 @@ function CheckInTab({
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
         <div>
-          <h2 className="text-base font-semibold">Weekly Check-In</h2>
+          <h2 className="text-base font-semibold">Daily Training Check-In</h2>
           <p className="text-[11px] text-white/30 mt-0.5">{formatWeekRange(weekStart)}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -548,12 +548,12 @@ function CheckInTab({
         <SectionTitle title="Reflection" subtitle="Take a moment — this is where growth becomes visible." />
         <div className="grid grid-cols-2 gap-3">
           {([
-            ["wins",                    "🌟 Wins",                          "What went well this week?"],
+            ["wins",                    "🌟 Wins",                          "What went well today?"],
             ["evidenceOfProgress",      "📈 Evidence of progress",          "What feels different or better?"],
             ["needsPatience",           "🌱 What needs patience",           "What are you still working on?"],
-            ["nextWeekStrengthGoal",    "💪 Next week: strength goal",      "One strength focus…"],
-            ["nextWeekFlexibilityGoal", "🌸 Next week: flexibility goal",   "One flexibility focus…"],
-            ["nextWeekTechniqueGoal",   "✨ Next week: technique goal",     "One technique focus…"],
+            ["nextWeekStrengthGoal",    "💪 Next focus: strength",          "One strength focus…"],
+            ["nextWeekFlexibilityGoal", "🌸 Next focus: flexibility",       "One flexibility focus…"],
+            ["nextWeekTechniqueGoal",   "✨ Next focus: technique",         "One technique focus…"],
           ] as [keyof DanceReflection, string, string][]).map(([field, label, placeholder]) => (
             <div key={field} className="flex flex-col gap-1.5">
               <p className="text-[11px] text-white/40">{label}</p>
@@ -585,11 +585,11 @@ function CheckInTab({
           onClick={save}
           className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:opacity-90 text-sm font-semibold transition-opacity shadow-lg shadow-violet-900/30"
         >
-          Save weekly check-in
+          Save daily check-in
         </button>
         {saved && (
           <div className="flex flex-col">
-            <p className="text-[12px] text-emerald-400">✓ Weekly check-in saved.</p>
+            <p className="text-[12px] text-emerald-400">✓ Daily check-in saved.</p>
             <p className="text-[11px] text-white/30 italic">Small progress still counts.</p>
           </div>
         )}
@@ -673,7 +673,7 @@ function AnalyticsTab({ checkIns }: { checkIns: DanceCheckIn[] }) {
         <div className="flex flex-col items-center gap-3 py-12 text-center">
           <div className="text-4xl">📊</div>
           <p className="text-white/50 font-medium">No data yet.</p>
-          <p className="text-white/25 text-sm">Complete your first weekly check-in to see analytics.</p>
+          <p className="text-white/25 text-sm">Complete your first training check-in to see analytics.</p>
         </div>
       </Panel>
     );
@@ -684,7 +684,7 @@ function AnalyticsTab({ checkIns }: { checkIns: DanceCheckIn[] }) {
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Weekly avg",     value: thisWeek ? getWeekAvg(thisWeek).toFixed(1) : "—",    sub: getScoreLabel(thisWeek ? getWeekAvg(thisWeek) : 0), color: "text-violet-400" },
+          { label: "Check-in avg",   value: thisWeek ? getWeekAvg(thisWeek).toFixed(1) : "—",    sub: getScoreLabel(thisWeek ? getWeekAvg(thisWeek) : 0), color: "text-violet-400" },
           { label: "Check-ins done", value: String(checkIns.length),                              sub: "total sessions",                                    color: "text-sky-400"    },
           { label: "Training days",  value: String(dailyStats.trainingDays),                      sub: "last 7 days",                                       color: "text-emerald-400"},
           { label: "Avg confidence", value: dailyStats.confidence ? dailyStats.confidence.toFixed(1) + "/5" : "—", sub: "last 7 days",                    color: "text-pink-400"   },
@@ -702,16 +702,16 @@ function AnalyticsTab({ checkIns }: { checkIns: DanceCheckIn[] }) {
         <div className="px-4 py-3 rounded-xl bg-emerald-900/15 border border-emerald-500/15 flex items-center gap-3">
           <span className="text-xl">{mostImprovedCat.icon}</span>
           <div>
-            <p className="text-[11px] text-emerald-400/80 font-medium">Most improved this week</p>
+            <p className="text-[11px] text-emerald-400/80 font-medium">Most improved recently</p>
             <p className="text-sm text-white/70">{mostImprovedCat.label}</p>
           </div>
         </div>
       )}
 
-      {/* Bar chart — this week */}
+      {/* Bar chart — current check-in */}
       {thisWeek && (
         <Panel>
-          <SectionTitle title="This Week — Category Averages" />
+          <SectionTitle title="Current Check-In — Category Averages" />
           <div className="h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>

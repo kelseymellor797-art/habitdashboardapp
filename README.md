@@ -16,6 +16,26 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Desktop App
+
+This project can also run as a macOS desktop app through Tauri.
+
+```bash
+npm run desktop:dev
+```
+
+Build the installed-style Mac app:
+
+```bash
+npm run desktop:build
+```
+
+The built app is created at:
+
+```bash
+src-tauri/target/release/bundle/macos/HabitFlow.app
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

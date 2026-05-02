@@ -7,40 +7,37 @@ type NavItem = { label: string; href: string; icon: string };
 
 const NAV_SECTIONS: { heading: string; items: NavItem[] }[] = [
   {
-    heading: "My Day",
+    heading: "Main",
     items: [
-      { label: "Dashboard",      href: "/dashboard",     icon: "🏠" },
-      { label: "Daily Check-In", href: "/daily-checkin", icon: "✅" },
+      { label: "Dashboard", href: "/dashboard", icon: "▣" },
     ],
   },
   {
-    heading: "Training",
+    heading: "Planner",
     items: [
-      { label: "Dance Training", href: "/dance",         icon: "💃" },
-      { label: "Conditioning",   href: "/conditioning",  icon: "🏋️" },
-      { label: "Progress",       href: "/progress",      icon: "📈" },
+      { label: "Habits",         href: "/habits",        icon: "✦" },
+      { label: "Routines",       href: "/routines",      icon: "◈" },
+      { label: "Daily Check-In", href: "/daily-checkin", icon: "✓" },
     ],
   },
   {
-    heading: "Wellness",
+    heading: "Dance",
     items: [
-      { label: "Water",          href: "/water",         icon: "💧" },
-      { label: "Nutrition",      href: "/nutrition",     icon: "🥗" },
-      { label: "Medication",     href: "/medication",    icon: "💊" },
+      { label: "Dance Training",  href: "/dance",           icon: "♪" },
+      { label: "Conditioning",    href: "/conditioning",    icon: "△" },
+      { label: "Skills",          href: "/skills",          icon: "◇" },
+      { label: "Media Vault",     href: "/media-vault",     icon: "▤" },
+      { label: "Dance Analytics", href: "/dance-analytics", icon: "↗" },
+      { label: "Progress",        href: "/progress",        icon: "▧" },
     ],
   },
   {
-    heading: "Inspire",
+    heading: "Other",
     items: [
-      { label: "Motivation",     href: "/motivation",    icon: "✨" },
+      { label: "Motivation", href: "/motivation", icon: "✺" },
+      { label: "Settings",   href: "/settings",   icon: "⊙" },
     ],
   },
-];
-
-const MANAGE_ITEMS: NavItem[] = [
-  { label: "Habits",    href: "/habits",    icon: "✦" },
-  { label: "Routines",  href: "/routines",  icon: "◈" },
-  { label: "Settings",  href: "/settings",  icon: "⊙" },
 ];
 
 function NavLink({ label, href, icon }: NavItem) {
@@ -50,25 +47,25 @@ function NavLink({ label, href, icon }: NavItem) {
   return (
     <Link
       href={href}
-      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-colors ${
+      className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-[13px] transition-colors ${
         active
-          ? "bg-violet-500/[0.15] text-white font-medium border border-violet-500/20"
-          : "text-white/40 hover:text-white/70 hover:bg-white/[0.04] border border-transparent"
+          ? "border-violet-500/20 bg-violet-500/[0.15] font-medium text-white"
+          : "border-transparent text-white/40 hover:bg-white/[0.04] hover:text-white/70"
       }`}
     >
       <span className="text-sm leading-none">{icon}</span>
       <span className="flex-1">{label}</span>
-      {active && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />}
+      {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />}
     </Link>
   );
 }
 
 export default function SidebarNav() {
   return (
-    <nav className="flex-1 px-3 py-3 flex flex-col gap-5 overflow-y-auto">
+    <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-3">
       {NAV_SECTIONS.map((section) => (
         <div key={section.heading}>
-          <p className="text-[9px] font-semibold text-white/25 uppercase tracking-widest px-2 mb-1.5">
+          <p className="mb-1.5 px-2 text-[9px] font-semibold uppercase tracking-widest text-white/25">
             {section.heading}
           </p>
           <div className="space-y-0.5">
@@ -78,17 +75,6 @@ export default function SidebarNav() {
           </div>
         </div>
       ))}
-
-      <div className="mt-auto pt-2 border-t border-white/[0.06]">
-        <p className="text-[9px] font-semibold text-white/25 uppercase tracking-widest px-2 mb-1.5">
-          Manage
-        </p>
-        <div className="space-y-0.5">
-          {MANAGE_ITEMS.map((item) => (
-            <NavLink key={item.href} {...item} />
-          ))}
-        </div>
-      </div>
     </nav>
   );
 }
