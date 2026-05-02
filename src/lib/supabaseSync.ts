@@ -34,11 +34,15 @@ async function fetchRows<R extends SupabaseRow>(table: string, orderBy?: string)
 }
 
 async function hasSession(): Promise<boolean> {
+  // In single-user mode a fixed user id (NEXT_PUBLIC_SINGLE_USER_ID) represents a signed-in state
+  if (process.env.NEXT_PUBLIC_SINGLE_USER_ID) return true;
   const { data } = await supabase.auth.getSession();
   return Boolean(data.session);
 }
 
-async function getUserId(): Promise<string | null> {
+export async function getUserId(): Promise<string | null> {
+  const single = process.env.NEXT_PUBLIC_SINGLE_USER_ID;
+  if (single) return single;
   const { data } = await supabase.auth.getUser();
   return data.user?.id ?? null;
 }

@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { getUserId } from "./supabaseSync";
 
 export const MEDIA_VAULT_BUCKET = "media-vault";
 export const STORAGE_MEDIA_URL_PREFIX = "storage-media://";
@@ -20,10 +21,8 @@ export function getStorageMediaPath(url: string): string | null {
 }
 
 export async function uploadPrivateMediaFile(entryId: string, file: File): Promise<string> {
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw userError;
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("Sign in before uploading media.");
+  const userId = await getUserId();
+  if (!userId) throw new Error("Sign in (or set NEXT_PUBLIC_SINGLE_USER_ID) before uploading media.");
 
   const path = `${userId}/${entryId}/${Date.now()}-${safeFileName(file.name)}`;
   const { error } = await supabase.storage
