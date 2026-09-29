@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { ensureDataRecoveryMigration } from "./dataRecovery";
 import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 export type MuscleGroup =
@@ -224,6 +225,7 @@ function sessionToRow(session: ConditioningSession): ConditioningSessionRow {
 
 export function loadConditioningRoutines(): ConditioningRoutine[] {
   if (typeof window === "undefined") return DEFAULT_ROUTINES;
+  ensureDataRecoveryMigration();
   try {
     const raw = localStorage.getItem(ROUTINES_KEY);
     if (raw === null) {
@@ -267,6 +269,7 @@ export function saveConditioningRoutines(r: ConditioningRoutine[]): void {
 
 export function loadConditioningSessions(): ConditioningSession[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   const sessions = readSessionsCache();
   syncCollection({
     key: SESSIONS_KEY,

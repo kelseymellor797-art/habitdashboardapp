@@ -1,5 +1,6 @@
 import { type ScheduleType } from "./store";
 import { notifyAppDataUpdated } from "./appEvents";
+import { ensureDataRecoveryMigration } from "./dataRecovery";
 import { saveRemoteCollection, saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -168,6 +169,7 @@ function routineEntryCacheToRows(entries: Record<string, RoutineEntry>): Routine
 
 export function loadRoutines(): Routine[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   try {
     const raw = localStorage.getItem(ROUTINES_KEY);
     if (!raw) {
@@ -221,6 +223,7 @@ export function saveRoutines(routines: Routine[]): void {
 
 export function loadRoutineEntries(): Record<string, RoutineEntry> {
   if (typeof window === "undefined") return {};
+  ensureDataRecoveryMigration();
   const entries = readRoutineEntriesCache();
   syncCollection<RoutineEntryRow, RoutineEntryRow>({
     key: ROUTINE_ENTRIES_KEY,

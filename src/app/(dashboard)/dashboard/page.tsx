@@ -11,6 +11,8 @@ import { loadConditioningSessions, type ConditioningSession } from "@/lib/condit
 import { type DanceDailyStatus, loadDailyStatuses } from "@/lib/danceData";
 import {
   getTodayCheckIn,
+  getMoodCategory,
+  getMoodFeelingsLabel,
   loadDailyCheckIns,
   todayDateString,
   type DailyCheckIn,
@@ -23,6 +25,13 @@ import { loadCompletions, loadHabits } from "@/lib/store";
 
 const MOOD_EMOJIS: Record<number, string> = {
   1: "😞", 2: "😕", 3: "😐", 4: "😊", 5: "🤩",
+};
+
+const MOOD_CATEGORY_ICON: Record<string, string> = {
+  "Depressed / Low": "🌧️",
+  "Meh / Neutral": "☁️",
+  Good: "🌤️",
+  "High / Amazing": "✨",
 };
 
 const ENERGY_EMOJIS: Record<number, string> = {
@@ -257,7 +266,7 @@ export default function DashboardPage() {
         <Panel className="flex flex-col gap-3" hoverable>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-white/25">Today's Habits</p>
+              <p className="text-[10px] uppercase tracking-widest text-white/25">Today&apos;s Habits</p>
               <p className="mt-1 text-2xl font-bold text-white">
                 {habitsDone}<span className="text-lg font-normal text-white/25">/{habitsTotal}</span>
               </p>
@@ -273,7 +282,7 @@ export default function DashboardPage() {
         <Panel className="flex flex-col gap-3" hoverable>
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-white/25">Today's Routines</p>
+              <p className="text-[10px] uppercase tracking-widest text-white/25">Today&apos;s Routines</p>
               <p className="mt-1 text-2xl font-bold text-white">
                 {routinesDone}<span className="text-lg font-normal text-white/25">/{routinesTotal}</span>
               </p>
@@ -300,11 +309,11 @@ export default function DashboardPage() {
           </div>
           {todayCheckIn ? (
             <div className="flex gap-4">
-              <span className="text-xl">{MOOD_EMOJIS[todayCheckIn.mood]}</span>
+              <span className="text-xl">{MOOD_CATEGORY_ICON[todayCheckIn.moodCategory ?? getMoodCategory(todayCheckIn.moodFeeling, todayCheckIn.mood)] ?? MOOD_EMOJIS[todayCheckIn.mood]}</span>
               <div className="flex-1 space-y-2">
                 <div>
                   <div className="mb-1 flex justify-between text-[11px] text-white/35">
-                    <span>Mood</span><span>{todayCheckIn.mood}/5</span>
+                    <span>Mood</span><span>{getMoodFeelingsLabel(todayCheckIn)}</span>
                   </div>
                   <MiniBar pct={(todayCheckIn.mood / 5) * 100} color="bg-pink-500" />
                 </div>
@@ -317,7 +326,7 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <p className="text-[12px] text-white/30">Log mood, energy, confidence, soreness, and tomorrow's focus.</p>
+            <p className="text-[12px] text-white/30">Log mood, energy, confidence, soreness, and tomorrow&apos;s focus.</p>
           )}
         </Panel>
 

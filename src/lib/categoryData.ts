@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { ensureDataRecoveryMigration } from "./dataRecovery";
 import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 export type Category = {
@@ -58,6 +59,7 @@ function categoryToRow(category: Category): CategoryRow {
 
 export function loadCategories(): Category[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   const categories = readCategoriesCache();
   syncCollection({
     key: CATEGORIES_KEY,

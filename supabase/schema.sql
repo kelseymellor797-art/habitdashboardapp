@@ -33,6 +33,9 @@ create table if not exists daily_checkins (
   id text primary key,
   date date not null,
   mood integer not null default 3,
+  mood_feeling text,
+  mood_feelings text[] default '{}',
+  mood_category text,
   energy integer not null default 3,
   motivation integer not null default 3,
   confidence integer not null default 3,
@@ -89,6 +92,68 @@ create table if not exists dance_daily_statuses (
   confidence integer not null default 3,
   trained_today boolean not null default false,
   notes text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists dance_training_plans (
+  id uuid primary key default gen_random_uuid(),
+  date date not null,
+  title text not null default 'Daily Training Plan',
+  training_prep jsonb not null default '{}'::jsonb,
+  warm_up jsonb not null default '{}'::jsonb,
+  break_1 jsonb not null default '{}'::jsonb,
+  training_session_1 jsonb not null default '{}'::jsonb,
+  break_2 jsonb not null default '{}'::jsonb,
+  training_session_2 jsonb not null default '{}'::jsonb,
+  break_3 jsonb not null default '{}'::jsonb,
+  training_session_3 jsonb not null default '{}'::jsonb,
+  training_clean_up jsonb not null default '{}'::jsonb,
+  active_training_time integer not null default 0,
+  total_plan_time integer not null default 0,
+  total_blocked_time integer not null default 0,
+  break_prep_cleanup_time integer not null default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists dance_training_plan_sections (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null references dance_training_plans(id) on delete cascade,
+  type text not null default 'Training Session',
+  category text not null,
+  title text not null,
+  notes text,
+  minutes integer not null default 0,
+  counts_as_active_time boolean not null default false,
+  completed boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists dance_training_plan_section_items (
+  id uuid primary key default gen_random_uuid(),
+  section_id uuid not null references dance_training_plan_sections(id) on delete cascade,
+  label text not null default '',
+  notes text,
+  minutes integer not null default 0,
+  item_type text not null default 'field',
+  type text not null default 'Pole tricks',
+  completed boolean not null default false,
+  sort_order integer not null default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists dance_training_plan_focus_items (
+  id uuid primary key default gen_random_uuid(),
+  section_id uuid not null references dance_training_plan_sections(id) on delete cascade,
+  label text not null default '',
+  type text not null default 'Pole tricks',
+  difficulty text not null default 'Medium',
+  completed boolean not null default false,
+  sort_order integer not null default 0,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -172,7 +237,11 @@ create table if not exists dance_skills (
 create table if not exists dance_skill_logs (
   id text primary key,
   skill_id text not null references dance_skills(id) on delete cascade,
+  skill_name text,
+  category text,
   date date not null,
+  attempts integer default 1,
+  confidence integer,
   confidence_before integer not null,
   confidence_after integer,
   fear_level integer,
@@ -182,6 +251,9 @@ create table if not exists dance_skill_logs (
   attempted boolean not null default true,
   notes text,
   filmed boolean,
+  media_id text,
+  tags text[] default '{}',
+  win boolean default false,
   created_at timestamptz default now()
 );
 
@@ -193,6 +265,10 @@ alter table routines enable row level security;
 alter table routine_entries enable row level security;
 alter table dance_checkins enable row level security;
 alter table dance_daily_statuses enable row level security;
+alter table dance_training_plans enable row level security;
+alter table dance_training_plan_sections enable row level security;
+alter table dance_training_plan_section_items enable row level security;
+alter table dance_training_plan_focus_items enable row level security;
 alter table conditioning_routines enable row level security;
 alter table conditioning_sessions enable row level security;
 alter table weight_entries enable row level security;
@@ -205,15 +281,28 @@ create index if not exists habits_category_id_idx on habits (category_id);
 create index if not exists routines_category_id_idx on routines (category_id);
 create index if not exists conditioning_sessions_routine_id_idx on conditioning_sessions (routine_id);
 create index if not exists dance_skill_logs_skill_id_idx on dance_skill_logs (skill_id);
+create index if not exists dance_training_plan_sections_plan_id_idx on dance_training_plan_sections (plan_id);
+create index if not exists dance_training_plan_section_items_section_id_idx on dance_training_plan_section_items (section_id);
+create index if not exists dance_training_plan_focus_items_section_id_idx on dance_training_plan_focus_items (section_id);
 
 alter table categories add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table habits add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table habit_completions add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table daily_checkins add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table daily_checkins add column if not exists mood_feeling text;
+alter table daily_checkins add column if not exists mood_feelings text[] default '{}';
+alter table daily_checkins add column if not exists mood_category text;
 alter table routines add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table routine_entries add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table dance_checkins add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table dance_daily_statuses add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table dance_training_plans add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table dance_training_plans add column if not exists title text not null default 'Daily Training Plan';
+alter table dance_training_plans add column if not exists total_plan_time integer not null default 0;
+alter table dance_training_plan_sections add column if not exists type text default 'Training Session';
+alter table dance_training_plan_sections add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table dance_training_plan_section_items add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
+alter table dance_training_plan_focus_items add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table conditioning_routines add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table conditioning_sessions add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
 alter table weight_entries add column if not exists user_id uuid references auth.users(id) on delete cascade default auth.uid();
@@ -230,6 +319,10 @@ create index if not exists routines_user_id_idx on routines (user_id);
 create index if not exists routine_entries_user_id_idx on routine_entries (user_id);
 create index if not exists dance_checkins_user_id_idx on dance_checkins (user_id);
 create index if not exists dance_daily_statuses_user_id_idx on dance_daily_statuses (user_id);
+create index if not exists dance_training_plans_user_id_idx on dance_training_plans (user_id);
+create index if not exists dance_training_plan_sections_user_id_idx on dance_training_plan_sections (user_id);
+create index if not exists dance_training_plan_section_items_user_id_idx on dance_training_plan_section_items (user_id);
+create index if not exists dance_training_plan_focus_items_user_id_idx on dance_training_plan_focus_items (user_id);
 create index if not exists conditioning_routines_user_id_idx on conditioning_routines (user_id);
 create index if not exists conditioning_sessions_user_id_idx on conditioning_sessions (user_id);
 create index if not exists weight_entries_user_id_idx on weight_entries (user_id);
@@ -245,12 +338,14 @@ alter table routine_entries drop constraint if exists routine_entries_routine_id
 alter table daily_checkins drop constraint if exists daily_checkins_user_id_date_key;
 alter table dance_checkins drop constraint if exists dance_checkins_user_id_week_of_key;
 alter table dance_daily_statuses drop constraint if exists dance_daily_statuses_user_id_date_key;
+alter table dance_training_plans drop constraint if exists dance_training_plans_user_id_date_key;
 alter table habit_completions drop constraint if exists habit_completions_user_id_habit_id_date_key;
 alter table routine_entries drop constraint if exists routine_entries_user_id_routine_id_date_key;
 
 alter table daily_checkins add constraint daily_checkins_user_id_date_key unique (user_id, date);
 alter table dance_checkins add constraint dance_checkins_user_id_week_of_key unique (user_id, week_of);
 alter table dance_daily_statuses add constraint dance_daily_statuses_user_id_date_key unique (user_id, date);
+alter table dance_training_plans add constraint dance_training_plans_user_id_date_key unique (user_id, date);
 alter table habit_completions add constraint habit_completions_user_id_habit_id_date_key unique (user_id, habit_id, date);
 alter table routine_entries add constraint routine_entries_user_id_routine_id_date_key unique (user_id, routine_id, date);
 
@@ -262,6 +357,10 @@ drop policy if exists routines_all_access on routines;
 drop policy if exists routine_entries_all_access on routine_entries;
 drop policy if exists dance_checkins_all_access on dance_checkins;
 drop policy if exists dance_daily_statuses_all_access on dance_daily_statuses;
+drop policy if exists dance_training_plans_all_access on dance_training_plans;
+drop policy if exists dance_training_plan_sections_all_access on dance_training_plan_sections;
+drop policy if exists dance_training_plan_section_items_all_access on dance_training_plan_section_items;
+drop policy if exists dance_training_plan_focus_items_all_access on dance_training_plan_focus_items;
 drop policy if exists conditioning_routines_all_access on conditioning_routines;
 drop policy if exists conditioning_sessions_all_access on conditioning_sessions;
 drop policy if exists weight_entries_all_access on weight_entries;
@@ -277,6 +376,10 @@ drop policy if exists routines_owner_access on routines;
 drop policy if exists routine_entries_owner_access on routine_entries;
 drop policy if exists dance_checkins_owner_access on dance_checkins;
 drop policy if exists dance_daily_statuses_owner_access on dance_daily_statuses;
+drop policy if exists dance_training_plans_owner_access on dance_training_plans;
+drop policy if exists dance_training_plan_sections_owner_access on dance_training_plan_sections;
+drop policy if exists dance_training_plan_section_items_owner_access on dance_training_plan_section_items;
+drop policy if exists dance_training_plan_focus_items_owner_access on dance_training_plan_focus_items;
 drop policy if exists conditioning_routines_owner_access on conditioning_routines;
 drop policy if exists conditioning_sessions_owner_access on conditioning_sessions;
 drop policy if exists weight_entries_owner_access on weight_entries;
@@ -293,6 +396,10 @@ create policy routines_owner_access on routines for all to authenticated using (
 create policy routine_entries_owner_access on routine_entries for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy dance_checkins_owner_access on dance_checkins for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy dance_daily_statuses_owner_access on dance_daily_statuses for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy dance_training_plans_owner_access on dance_training_plans for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy dance_training_plan_sections_owner_access on dance_training_plan_sections for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy dance_training_plan_section_items_owner_access on dance_training_plan_section_items for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy dance_training_plan_focus_items_owner_access on dance_training_plan_focus_items for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy conditioning_routines_owner_access on conditioning_routines for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy conditioning_sessions_owner_access on conditioning_sessions for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy weight_entries_owner_access on weight_entries for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);

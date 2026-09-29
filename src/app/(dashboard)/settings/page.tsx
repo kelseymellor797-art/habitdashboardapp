@@ -7,6 +7,13 @@ import {
   type Category,
   loadCategories, saveCategories, generateCategoryId, CATEGORY_COLORS,
 } from "@/lib/categoryData";
+import {
+  ensureDataRecoveryMigration,
+  exportBackupJson,
+  getRecoverySnapshot,
+  importBackupJson,
+  type RecoverySnapshot,
+} from "@/lib/dataRecovery";
 import { notifyUpdate } from "@/lib/store";
 
 
@@ -18,13 +25,50 @@ export default function SettingsPage() {
   const [newCatName, setNewCatName] = useState("");
   const [newCatColor, setNewCatColor] = useState(CATEGORY_COLORS[0]);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; usageCount: number } | null>(null);
+  const [recovery, setRecovery] = useState<RecoverySnapshot | null>(null);
+  const [importStatus, setImportStatus] = useState("");
 
   useEffect(() => {
-    setCategories(loadCategories());
-    const handler = () => setCategories(loadCategories());
+    ensureDataRecoveryMigration();
+    const loadSettingsData = () => {
+      setCategories(loadCategories());
+      setRecovery(getRecoverySnapshot());
+    };
+    queueMicrotask(loadSettingsData);
+    const handler = () => queueMicrotask(loadSettingsData);
     window.addEventListener("habitflow:updated", handler);
     return () => window.removeEventListener("habitflow:updated", handler);
   }, []);
+
+  function refreshRecovery() {
+    setRecovery(getRecoverySnapshot());
+  }
+
+  function exportRecoveryBackup() {
+    const blob = new Blob([exportBackupJson()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `habitflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    refreshRecovery();
+  }
+
+  function importRecoveryBackup(file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        importBackupJson(String(reader.result ?? ""));
+        setImportStatus("Imported backup JSON.");
+        refreshRecovery();
+      } catch (error) {
+        setImportStatus(error instanceof Error ? error.message : "Import failed.");
+      }
+    };
+    reader.readAsText(file);
+  }
 
   function persistCategories(updated: Category[]) {
     setCategories(updated);
@@ -325,6 +369,68 @@ export default function SettingsPage() {
               Clear Data
             </button>
           </div>
+        </div>
+      </Panel>
+
+      <Panel className="flex flex-col">
+        <div className="flex items-center justify-between gap-3">
+          <SectionTitle title="Data Recovery" />
+          <button
+            onClick={refreshRecovery}
+            className="text-[11px] px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-white/50 hover:text-white/75 transition-colors"
+          >
+            Refresh
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-white/[0.06] bg-[#080B12] p-3">
+            <p className="text-[10px] uppercase tracking-widest text-white/25">Active Source</p>
+            <p className="mt-1 text-[12px] text-white/70">{recovery?.activeStorageSource ?? "Checking..."}</p>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] bg-[#080B12] p-3">
+            <p className="text-[10px] uppercase tracking-widest text-white/25">Last Backup</p>
+            <p className="mt-1 truncate font-mono text-[11px] text-white/45">{recovery?.lastBackupKey ?? "None detected"}</p>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {recovery && Object.entries(recovery.counts).map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-white/[0.05] bg-white/[0.025] px-3 py-2">
+              <p className="text-[10px] capitalize text-white/35">{label.replace(/([A-Z])/g, " $1")}</p>
+              <p className="mt-0.5 text-sm font-semibold text-white">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4">
+          <p className="text-[10px] uppercase tracking-widest text-white/25">Detected localStorage Keys</p>
+          <div className="mt-2 max-h-32 overflow-auto rounded-lg border border-white/[0.06] bg-[#080B12] p-3">
+            {recovery?.detectedKeys.length ? (
+              <div className="flex flex-col gap-1">
+                {recovery.detectedKeys.map((key) => (
+                  <span key={key} className="font-mono text-[11px] text-white/40">{key}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-white/25">No app storage keys detected.</p>
+            )}
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            onClick={exportRecoveryBackup}
+            className="text-[11px] font-medium text-sky-300 bg-sky-500/10 hover:bg-sky-500/15 border border-sky-500/20 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            Export Backup JSON
+          </button>
+          <label className="cursor-pointer text-[11px] font-medium text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 rounded-lg px-3 py-1.5 transition-colors">
+            Import Backup JSON
+            <input
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(event) => importRecoveryBackup(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          {importStatus && <span className="text-[11px] text-white/35">{importStatus}</span>}
         </div>
       </Panel>
 

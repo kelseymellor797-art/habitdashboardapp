@@ -1,5 +1,6 @@
 // Central data store for HabitFlow — all persistence via localStorage
 import { notifyAppDataUpdated } from "./appEvents";
+import { ensureDataRecoveryMigration } from "./dataRecovery";
 import { saveRemoteCollection, saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 export type ScheduleType = "daily" | "weekly" | "custom";
@@ -148,6 +149,7 @@ export function dayToDate(day: number): string {
 
 export function loadHabits(): Habit[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   try {
     const raw = localStorage.getItem(HABITS_KEY);
     if (!raw) {
@@ -217,6 +219,7 @@ export function saveHabits(habits: Habit[]): void {
 
 export function loadCompletions(): Completion[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   try {
     const completions = readCompletionsCache();
     syncCollection({

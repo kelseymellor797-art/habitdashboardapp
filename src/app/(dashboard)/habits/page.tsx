@@ -98,6 +98,44 @@ function scheduleBadge(h: Habit): string {
   return h.scheduleType;
 }
 
+function CategorySelect({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: Category[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <label className="text-[12px] text-white/40 shrink-0 w-20">Category</label>
+      {categories.length === 0 ? (
+        <p className="text-[11px] text-white/25 italic">
+          No categories yet — create one in{" "}
+          <a href="/veil/categories" className="text-violet-400/70 hover:text-violet-400 underline underline-offset-2">
+            Categories
+          </a>
+          .
+        </p>
+      ) : (
+        <select
+          className="flex-1 bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white/70 outline-none focus:border-violet-500/50"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          <option value="">No category</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
 export default function HabitsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -187,40 +225,6 @@ export default function HabitsPage() {
     return categories.find((c) => c.id === id)?.color ?? null;
   }
 
-  const CategorySelect = ({
-    value,
-    onChange,
-  }: {
-    value: string;
-    onChange: (v: string) => void;
-  }) => (
-    <div className="flex items-center gap-3">
-      <label className="text-[12px] text-white/40 shrink-0 w-20">Category</label>
-      {categories.length === 0 ? (
-        <p className="text-[11px] text-white/25 italic">
-          No categories yet — create one in{" "}
-          <a href="/settings" className="text-violet-400/70 hover:text-violet-400 underline underline-offset-2">
-            Settings
-          </a>
-          .
-        </p>
-      ) : (
-        <select
-          className="flex-1 bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-2 text-sm text-white/70 outline-none focus:border-violet-500/50"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">No category</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      )}
-    </div>
-  );
-
   return (
     <div className="flex flex-col gap-5 max-w-[900px]">
       <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
@@ -265,6 +269,7 @@ export default function HabitsPage() {
               />
             </div>
             <CategorySelect
+              categories={categories}
               value={form.categoryId}
               onChange={(v) => {
                 const cc = categories.find((c) => c.id === v)?.color;
@@ -338,6 +343,7 @@ export default function HabitsPage() {
                     />
                   </div>
                   <CategorySelect
+                    categories={categories}
                     value={(editDraft.categoryId as string) ?? ""}
                     onChange={(v) => {
                       const cc = categories.find((c) => c.id === v)?.color;

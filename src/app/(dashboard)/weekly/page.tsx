@@ -135,7 +135,7 @@ export default function WeeklyPage() {
     return () => window.removeEventListener("habitflow:updated", reload);
   }, []);
 
-  const allRows = [...stats.habitRows, ...stats.routineRows];
+  const allRows = useMemo(() => [...stats.habitRows, ...stats.routineRows], [stats.habitRows, stats.routineRows]);
   const grouped = useMemo(() => groupRows(allRows, categories), [allRows, categories]);
   const hasCatLabels = categories.length > 0 || allRows.some((r) => !!r.categoryId);
 

@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { ensureDataRecoveryMigration } from "./dataRecovery";
 import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 export type QuoteCategory =
@@ -100,6 +101,7 @@ function quoteToRow(quote: Quote): QuoteRow {
 
 export function loadQuotes(): Quote[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   const quotes = readQuotesCache();
   syncCollection({
     key: QUOTES_KEY,

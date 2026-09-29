@@ -12,25 +12,29 @@ import {
   generateCheckInId,
   todayDateString,
   emptyCheckIn,
+  MOOD_CATEGORIES,
+  getMoodCategory,
+  getMoodCategoryForFeelings,
+  getMoodFeelingsLabel,
+  moodScoreFromCategory,
+  type MoodCategory,
 } from "@/lib/dailyCheckinData";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const TRAINING_TYPES = [
-  { value: "pole", label: "Pole" },
-  { value: "heels", label: "Heels" },
-  { value: "conditioning", label: "Conditioning" },
-  { value: "flexibility", label: "Flexibility" },
-  { value: "performance", label: "Performance" },
-  { value: "other", label: "Other" },
-];
-
-const MOOD_EMOJIS: Record<number, string> = {
-  1: "😞", 2: "😕", 3: "😐", 4: "😊", 5: "🤩",
+const MOOD_CATEGORY_META: Record<MoodCategory, { icon: string; tone: string }> = {
+  "Depressed / Low": { icon: "🌧️", tone: "text-blue-200 border-blue-300/30 bg-blue-400/10" },
+  "Meh / Neutral": { icon: "☁️", tone: "text-white/80 border-white/15 bg-white/[0.05]" },
+  Good: { icon: "🌤️", tone: "text-emerald-100 border-emerald-300/30 bg-emerald-400/10" },
+  "High / Amazing": { icon: "✨", tone: "text-amber-100 border-amber-300/30 bg-amber-400/10" },
 };
 const ENERGY_EMOJIS: Record<number, string> = {
   1: "🪫", 2: "😴", 3: "⚡", 4: "🔥", 5: "💥",
 };
+
+function monthPrefixFromDate(date: string): string {
+  return date.slice(0, 7);
+}
 
 // ── Scale buttons ──────────────────────────────────────────────────────────────
 
@@ -71,6 +75,36 @@ function ScaleButtons({
   );
 }
 
+function EnergySlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-2xl">{ENERGY_EMOJIS[value]}</span>
+        <span className="text-sm font-semibold text-white">{value}/5</span>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="5"
+        step="1"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-2 w-full cursor-pointer accent-amber-400"
+      />
+      <div className="mt-2 flex justify-between px-0.5 text-[10px] text-white/25">
+        <span>🪫 Drained</span>
+        <span>💥 Energized</span>
+      </div>
+    </div>
+  );
+}
+
 // ── History item ───────────────────────────────────────────────────────────────
 
 function HistoryRow({ entry }: { entry: DailyCheckIn }) {
@@ -79,6 +113,9 @@ function HistoryRow({ entry }: { entry: DailyCheckIn }) {
   const dateLabel = date.toLocaleDateString("en-US", {
     weekday: "short", month: "short", day: "numeric",
   });
+  const moodCategory = entry.moodCategory ?? getMoodCategory(entry.moodFeeling, entry.mood);
+  const moodMeta = MOOD_CATEGORY_META[moodCategory];
+  const moodLabel = getMoodFeelingsLabel(entry);
 
   return (
     <div className="border border-white/[0.06] rounded-xl overflow-hidden">
@@ -88,8 +125,8 @@ function HistoryRow({ entry }: { entry: DailyCheckIn }) {
         className="w-full flex items-center gap-4 px-4 py-3 hover:bg-white/[0.03] transition-colors text-left"
       >
         <span className="text-[12px] text-white/40 w-28 shrink-0">{dateLabel}</span>
-        <span className="text-base">{MOOD_EMOJIS[entry.mood]}</span>
-        <span className="text-[11px] text-white/30">Mood {entry.mood}/5</span>
+        <span className="text-base">{moodMeta.icon}</span>
+        <span className="min-w-0 flex-1 truncate text-[11px] text-white/60">{moodLabel}</span>
         <span className="text-base ml-1">{ENERGY_EMOJIS[entry.energy]}</span>
         <span className="text-[11px] text-white/30">Energy {entry.energy}/5</span>
         {entry.trainedToday && (
@@ -104,7 +141,6 @@ function HistoryRow({ entry }: { entry: DailyCheckIn }) {
         <div className="px-4 pb-4 pt-1 border-t border-white/[0.04] space-y-3">
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "Mood", value: entry.mood },
               { label: "Energy", value: entry.energy },
               { label: "Motivation", value: entry.motivation },
               { label: "Confidence", value: entry.confidence },
@@ -132,6 +168,20 @@ function HistoryRow({ entry }: { entry: DailyCheckIn }) {
               {entry.trainingDuration && (
                 <span className="text-[11px] text-white/30">· {entry.trainingDuration} min</span>
               )}
+            </div>
+          )}
+
+          {(entry.bodyNotes || entry.bodyAreas?.length) && (
+            <div>
+              <span className="text-[10px] text-white/25 uppercase tracking-wide block mb-0.5">Body notes</span>
+              {entry.bodyAreas?.length ? (
+                <div className="mb-1 flex flex-wrap gap-1">
+                  {entry.bodyAreas.map((area) => (
+                    <span key={area} className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/45">{area}</span>
+                  ))}
+                </div>
+              ) : null}
+              {entry.bodyNotes && <p className="text-[12px] text-white/60">{entry.bodyNotes}</p>}
             </div>
           )}
 
@@ -163,22 +213,31 @@ export default function DailyCheckInPage() {
 
   // Form state
   type FormState = {
-    mood: number; energy: number; motivation: number; confidence: number;
+    mood: number; moodFeeling: string; moodFeelings: string[]; moodCategory: MoodCategory;
+    energy: number; motivation: number; confidence: number;
     soreness: number; flexibilityFeeling: number; strengthFeeling: number;
+    bodyNotes: string; bodyAreas: string[];
     trainedToday: boolean; trainingType: string; trainingDuration: string;
     mentalStateNotes: string; wins: string; whatFeltHard: string; goalsForTomorrow: string;
   };
 
   const defaultForm = (): FormState => ({
-    mood: 3, energy: 3, motivation: 3, confidence: 3,
+    mood: 3, moodFeeling: "Just okay", moodFeelings: ["Just okay"], moodCategory: "Meh / Neutral",
+    energy: 3, motivation: 3, confidence: 3,
     soreness: 3, flexibilityFeeling: 3, strengthFeeling: 3,
+    bodyNotes: "", bodyAreas: [],
     trainedToday: false, trainingType: "", trainingDuration: "",
     mentalStateNotes: "", wins: "", whatFeltHard: "", goalsForTomorrow: "",
   });
 
   const formFromEntry = (e: DailyCheckIn): FormState => ({
-    mood: e.mood, energy: e.energy, motivation: e.motivation, confidence: e.confidence,
+    mood: e.mood,
+    moodFeeling: e.moodFeeling ?? getMoodFeelingsLabel(e),
+    moodFeelings: e.moodFeelings?.length ? e.moodFeelings : [e.moodFeeling ?? "Just okay"],
+    moodCategory: e.moodCategory ?? getMoodCategoryForFeelings(e.moodFeelings, e.mood),
+    energy: e.energy, motivation: e.motivation, confidence: e.confidence,
     soreness: e.soreness, flexibilityFeeling: e.flexibilityFeeling,
+    bodyNotes: e.bodyNotes ?? "", bodyAreas: e.bodyAreas ?? [],
     strengthFeeling: e.strengthFeeling, trainedToday: e.trainedToday,
     trainingType: e.trainingType ?? "", trainingDuration: e.trainingDuration ? String(e.trainingDuration) : "",
     mentalStateNotes: e.mentalStateNotes ?? "", wins: e.wins ?? "",
@@ -218,6 +277,28 @@ export default function DailyCheckInPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  function selectFeeling(feeling: string, category: MoodCategory) {
+    setForm((prev) => {
+      const currentFeelings = prev.moodFeelings.length === 1 && prev.moodFeelings[0] === "Just okay" && feeling !== "Just okay"
+        ? []
+        : prev.moodFeelings;
+      const toggledFeelings = currentFeelings.includes(feeling)
+        ? currentFeelings.filter((item) => item !== feeling)
+        : [...currentFeelings, feeling];
+      const nextFeelings = toggledFeelings.length ? toggledFeelings : ["Just okay"];
+      const nextCategory = toggledFeelings.includes(feeling)
+        ? category
+        : getMoodCategoryForFeelings(nextFeelings, prev.mood);
+      return {
+        ...prev,
+        moodFeelings: nextFeelings,
+        moodFeeling: nextFeelings.join(", "),
+        moodCategory: nextCategory,
+        mood: moodScoreFromCategory(nextCategory),
+      };
+    });
+  }
+
   function handleSave() {
     const existing = getCheckInForDate(checkIns, selectedDate);
     const now = new Date().toISOString();
@@ -228,20 +309,24 @@ export default function DailyCheckInPage() {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       mood: form.mood,
+      moodFeeling: form.moodFeeling,
+      moodFeelings: form.moodFeelings,
+      moodCategory: form.moodCategory,
       energy: form.energy,
       motivation: form.motivation,
       confidence: form.confidence,
-      soreness: form.soreness,
-      flexibilityFeeling: form.flexibilityFeeling,
-      strengthFeeling: form.strengthFeeling,
-      trainedToday: form.trainedToday,
-      trainingType: form.trainedToday && form.trainingType ? form.trainingType : undefined,
-      trainingDuration: form.trainedToday && form.trainingDuration
-        ? Number(form.trainingDuration) : undefined,
-      mentalStateNotes: form.mentalStateNotes || undefined,
-      wins: form.wins || undefined,
-      whatFeltHard: form.whatFeltHard || undefined,
-      goalsForTomorrow: form.goalsForTomorrow || undefined,
+      soreness: existing?.soreness ?? form.soreness,
+      flexibilityFeeling: existing?.flexibilityFeeling ?? form.flexibilityFeeling,
+      strengthFeeling: existing?.strengthFeeling ?? form.strengthFeeling,
+      bodyNotes: existing?.bodyNotes,
+      bodyAreas: existing?.bodyAreas ?? [],
+      trainedToday: existing?.trainedToday ?? false,
+      trainingType: existing?.trainingType,
+      trainingDuration: existing?.trainingDuration,
+      mentalStateNotes: existing?.mentalStateNotes,
+      wins: existing?.wins,
+      whatFeltHard: existing?.whatFeltHard,
+      goalsForTomorrow: existing?.goalsForTomorrow,
     };
     const updated = existing
       ? checkIns.map((c) => (c.id === existing.id ? entry : c))
@@ -276,6 +361,16 @@ export default function DailyCheckInPage() {
   const existing = getCheckInForDate(checkIns, selectedDate);
   const recentHistory = checkIns.filter((c) => c.date !== selectedDate)
     .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 7);
+  const selectedMoodCategory = existing?.moodCategory ?? getMoodCategory(existing?.moodFeeling, existing?.mood ?? 3);
+  const selectedMoodMeta = MOOD_CATEGORY_META[selectedMoodCategory];
+  const selectedMoodLabel = existing ? getMoodFeelingsLabel(existing) : "";
+  const recentMoodCounts = MOOD_CATEGORIES.map(({ category }) => ({
+    category,
+    count: checkIns
+      .filter((entry) => entry.date >= monthPrefixFromDate(todayDateString()))
+      .filter((entry) => (entry.moodCategory ?? getMoodCategory(entry.moodFeeling, entry.mood)) === category)
+      .length,
+  }));
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -338,9 +433,12 @@ export default function DailyCheckInPage() {
               {/* Feelings row */}
               <div className="col-span-2">
                 <p className="text-[10px] text-white/25 uppercase tracking-widest mb-3">How you felt</p>
-                <div className="grid grid-cols-4 gap-3">
+                <div className={`mb-3 rounded-xl border px-4 py-3 ${selectedMoodMeta.tone}`}>
+                  <p className="text-[11px] uppercase tracking-widest opacity-70">{selectedMoodCategory}</p>
+                  <p className="mt-1 text-lg font-semibold">{selectedMoodMeta.icon} {selectedMoodLabel}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
                   {[
-                    { label: "Mood", val: existing.mood, emoji: MOOD_EMOJIS[existing.mood] },
                     { label: "Energy", val: existing.energy, emoji: ENERGY_EMOJIS[existing.energy] },
                     { label: "Motivation", val: existing.motivation, emoji: existing.motivation >= 4 ? "🔥" : existing.motivation >= 3 ? "💫" : "😶" },
                     { label: "Confidence", val: existing.confidence, emoji: existing.confidence >= 4 ? "💫" : existing.confidence >= 3 ? "😊" : "😬" },
@@ -354,57 +452,6 @@ export default function DailyCheckInPage() {
                 </div>
               </div>
 
-              {/* Body row */}
-              <div className="col-span-2">
-                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-3">Body</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { label: "Soreness", val: existing.soreness },
-                    { label: "Flexibility", val: existing.flexibilityFeeling },
-                    { label: "Strength", val: existing.strengthFeeling },
-                  ].map(({ label, val }) => (
-                    <div key={label} className="flex flex-col gap-1.5 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                      <span className="text-[10px] text-white/30">{label}</span>
-                      <div className="flex gap-0.5">
-                        {[1,2,3,4,5].map((n) => (
-                          <div key={n} className={`h-1.5 flex-1 rounded-full ${n <= val ? "bg-violet-500" : "bg-white/[0.07]"}`} />
-                        ))}
-                      </div>
-                      <span className="text-xs font-medium text-white/60">{val}/5</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Training */}
-              {existing.trainedToday && (
-                <div className="col-span-2 flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
-                  <span className="text-lg">💃</span>
-                  <div>
-                    <span className="text-sm font-medium text-white/80">Trained today</span>
-                    {existing.trainingType && (
-                      <span className="ml-2 text-[11px] text-violet-300/70 capitalize">{existing.trainingType}</span>
-                    )}
-                    {existing.trainingDuration && (
-                      <span className="ml-2 text-[11px] text-white/30">{existing.trainingDuration} min</span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Reflection snippets */}
-              {existing.wins && (
-                <div className="col-span-2">
-                  <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">Wins 🌟</p>
-                  <p className="text-[13px] text-white/60 leading-relaxed">{existing.wins}</p>
-                </div>
-              )}
-              {existing.goalsForTomorrow && (
-                <div className="col-span-2">
-                  <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1">Tomorrow ✨</p>
-                  <p className="text-[13px] text-white/60 leading-relaxed">{existing.goalsForTomorrow}</p>
-                </div>
-              )}
             </div>
           </Panel>
         </>
@@ -412,11 +459,40 @@ export default function DailyCheckInPage() {
         <>
       {/* Section 1: How I feel */}
       <Panel>
-        <SectionTitle title="How I Feel" subtitle="Rate yourself 1 (low) → 5 (high)" />
+        <SectionTitle title="How I Feel" subtitle="Choose every feeling that fits today" />
         <div className="space-y-5">
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+            <p className="text-[10px] uppercase tracking-widest text-white/25">Selected feelings</p>
+            <p className="mt-1 text-base font-semibold text-white">{MOOD_CATEGORY_META[form.moodCategory].icon} {form.moodFeeling}</p>
+            <p className="text-[12px] text-white/35">{form.moodCategory}</p>
+          </div>
+          <div className="space-y-4">
+            {MOOD_CATEGORIES.map(({ category, feelings }) => (
+              <div key={category}>
+                <p className="mb-2 text-[12px] font-semibold text-white/65">{MOOD_CATEGORY_META[category].icon} {category}</p>
+                <div className="flex flex-wrap gap-2">
+                  {feelings.map((feeling) => {
+                    const selected = form.moodFeelings.includes(feeling);
+                    return (
+                      <button
+                        key={feeling}
+                        type="button"
+                        onClick={() => selectFeeling(feeling, category)}
+                        className={`rounded-xl border px-3 py-2 text-[12px] font-medium transition-colors ${
+                          selected
+                            ? "border-emerald-300/50 bg-emerald-400/20 text-emerald-50"
+                            : "border-white/[0.08] bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/70"
+                        }`}
+                      >
+                        {feeling}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
           {[
-            { key: "mood" as const, label: "Mood", low: "😞 Low", high: "🤩 Amazing" },
-            { key: "energy" as const, label: "Energy", low: "🪫 Drained", high: "💥 Energised" },
             { key: "motivation" as const, label: "Motivation", low: "😶 Unmotivated", high: "🔥 Fired up" },
             { key: "confidence" as const, label: "Confidence", low: "😬 Shaky", high: "💫 Strong" },
           ].map(({ key, label, low, high }) => (
@@ -430,117 +506,26 @@ export default function DailyCheckInPage() {
               />
             </div>
           ))}
-        </div>
-      </Panel>
-
-      {/* Section 2: Body check */}
-      <Panel>
-        <SectionTitle title="Body Check" subtitle="How does your body feel right now?" />
-        <div className="space-y-5">
-          {[
-            { key: "soreness" as const, label: "Soreness", low: "😭 Very sore", high: "✨ Feeling fresh" },
-            { key: "flexibilityFeeling" as const, label: "Flexibility feeling", low: "🪨 Super stiff", high: "🤸 Super flexible" },
-            { key: "strengthFeeling" as const, label: "Strength feeling", low: "😓 Weak today", high: "💪 Feeling strong" },
-          ].map(({ key, label, low, high }) => (
-            <div key={key}>
-              <p className="text-[12px] font-medium text-white/60 mb-2">{label}</p>
-              <ScaleButtons
-                value={form[key] as number}
-                onChange={(v) => set(key, v)}
-                low={low}
-                high={high}
-              />
-            </div>
-          ))}
-        </div>
-      </Panel>
-
-      {/* Section 3: Training today */}
-      <Panel>
-        <SectionTitle title="Training Today" />
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => set("trainedToday", !form.trainedToday)}
-              className={`relative w-11 h-6 rounded-full transition-colors ${
-                form.trainedToday ? "bg-violet-500" : "bg-white/[0.1]"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  form.trainedToday ? "translate-x-5" : "translate-x-0.5"
-                }`}
-              />
-            </button>
-            <span className="text-[13px] text-white/70">
-              {form.trainedToday ? "Yes, I trained today 💪" : "No training today"}
-            </span>
+          <div>
+            <p className="text-[12px] font-medium text-white/60 mb-2">Energy</p>
+            <EnergySlider value={form.energy} onChange={(v) => set("energy", v)} />
           </div>
-
-          {form.trainedToday && (
-            <div className="space-y-4 pt-1">
-              <div>
-                <p className="text-[11px] text-white/30 uppercase tracking-wide mb-2">Type of training</p>
-                <div className="flex flex-wrap gap-2">
-                  {TRAINING_TYPES.map((t) => (
-                    <button
-                      key={t.value}
-                      type="button"
-                      onClick={() => set("trainingType", t.value)}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border ${
-                        form.trainingType === t.value
-                          ? "bg-violet-500/25 border-violet-500/50 text-violet-200"
-                          : "border-white/[0.08] text-white/35 hover:border-white/20 hover:text-white/60"
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-[11px] text-white/30 uppercase tracking-wide block mb-2">
-                  Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="300"
-                  value={form.trainingDuration}
-                  onChange={(e) => set("trainingDuration", e.target.value)}
-                  placeholder="e.g. 60"
-                  className="w-32 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white/80 placeholder-white/20 outline-none focus:border-violet-500/50"
-                />
-              </div>
-            </div>
-          )}
         </div>
       </Panel>
 
-      {/* Section 4: Reflection */}
-      <Panel>
-        <SectionTitle title="Reflection" subtitle="Your private journal — be honest ✍️" />
-        <div className="space-y-4">
-          {[
-            { key: "mentalStateNotes" as const, label: "Mental state", placeholder: "How's your head today? Any anxiety, focus issues, stress…" },
-            { key: "wins" as const, label: "Wins today 🌟", placeholder: "What went well? No win is too small." },
-            { key: "whatFeltHard" as const, label: "What felt hard 😤", placeholder: "What challenged you today? Be real with yourself." },
-            { key: "goalsForTomorrow" as const, label: "Goals for tomorrow ✨", placeholder: "One thing you want to focus on tomorrow." },
-          ].map(({ key, label, placeholder }) => (
-            <div key={key}>
-              <label className="text-[12px] font-medium text-white/50 block mb-1.5">{label}</label>
-              <textarea
-                rows={2}
-                value={form[key] as string}
-                onChange={(e) => set(key, e.target.value)}
-                placeholder={placeholder}
-                className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-4 py-3 text-sm text-white/75 placeholder-white/20 resize-none outline-none focus:border-violet-500/40 focus:bg-white/[0.05] transition-colors"
-              />
-            </div>
-          ))}
-        </div>
-      </Panel>
+      {checkIns.length > 0 && (
+        <Panel>
+          <SectionTitle title="Mood Pattern" subtitle="Feeling categories logged this month" />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {recentMoodCounts.map(({ category, count }) => (
+              <div key={category} className={`rounded-xl border p-3 ${MOOD_CATEGORY_META[category].tone}`}>
+                <p className="text-[10px] uppercase tracking-widest opacity-70">{category}</p>
+                <p className="mt-1 text-xl font-semibold">{count}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
 
       {/* Save button */}
       <button

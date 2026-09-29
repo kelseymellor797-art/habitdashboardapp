@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { ensureDataRecoveryMigration } from "./dataRecovery";
 import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -31,7 +32,11 @@ export interface DanceSkill {
 export interface DanceSkillLog {
   id: string;
   skillId: string;
+  skillName?: string;
+  category?: SkillCategory;
   date: string;
+  attempts?: number;
+  confidence?: number;
   confidenceBefore: number;
   confidenceAfter?: number;
   fearLevel?: number;
@@ -41,6 +46,9 @@ export interface DanceSkillLog {
   attempted: boolean;
   notes?: string;
   filmed?: boolean;
+  mediaId?: string;
+  tags?: string[];
+  win?: boolean;
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -99,7 +107,11 @@ type DanceSkillRow = {
 type DanceSkillLogRow = {
   id: string;
   skill_id: string;
+  skill_name?: string | null;
+  category?: SkillCategory | null;
   date: string;
+  attempts?: number | null;
+  confidence?: number | null;
   confidence_before: number;
   confidence_after: number | null;
   fear_level: number | null;
@@ -109,6 +121,9 @@ type DanceSkillLogRow = {
   attempted: boolean;
   notes: string | null;
   filmed: boolean | null;
+  media_id?: string | null;
+  tags?: string[] | null;
+  win?: boolean | null;
 };
 
 export function generateSkillId(): string {
@@ -348,7 +363,11 @@ function logFromRow(row: DanceSkillLogRow): DanceSkillLog {
   return {
     id: row.id,
     skillId: row.skill_id,
+    skillName: row.skill_name ?? undefined,
+    category: row.category ?? undefined,
     date: row.date,
+    attempts: row.attempts ?? (row.attempted ? 1 : 0),
+    confidence: row.confidence ?? row.confidence_after ?? row.confidence_before,
     confidenceBefore: row.confidence_before,
     confidenceAfter: row.confidence_after ?? undefined,
     fearLevel: row.fear_level ?? undefined,
@@ -358,6 +377,9 @@ function logFromRow(row: DanceSkillLogRow): DanceSkillLog {
     attempted: row.attempted,
     notes: row.notes ?? undefined,
     filmed: row.filmed ?? undefined,
+    mediaId: row.media_id ?? undefined,
+    tags: row.tags ?? undefined,
+    win: row.win ?? undefined,
   };
 }
 
@@ -365,7 +387,11 @@ function logToRow(log: DanceSkillLog): DanceSkillLogRow {
   return {
     id: log.id,
     skill_id: log.skillId,
+    skill_name: log.skillName ?? null,
+    category: log.category ?? null,
     date: log.date,
+    attempts: log.attempts ?? (log.attempted ? 1 : 0),
+    confidence: log.confidence ?? log.confidenceAfter ?? log.confidenceBefore,
     confidence_before: log.confidenceBefore,
     confidence_after: log.confidenceAfter ?? null,
     fear_level: log.fearLevel ?? null,
@@ -375,6 +401,9 @@ function logToRow(log: DanceSkillLog): DanceSkillLogRow {
     attempted: log.attempted,
     notes: log.notes ?? null,
     filmed: log.filmed ?? null,
+    media_id: log.mediaId ?? null,
+    tags: log.tags ?? null,
+    win: log.win ?? null,
   };
 }
 
@@ -382,6 +411,7 @@ function logToRow(log: DanceSkillLog): DanceSkillLogRow {
 
 export function loadSkills(): DanceSkill[] {
   if (typeof window === 'undefined') return SEED_SKILLS;
+  ensureDataRecoveryMigration();
   try {
     const raw = localStorage.getItem(SKILLS_KEY);
     // Seed on first visit (key never set)
@@ -422,6 +452,7 @@ export function saveSkills(skills: DanceSkill[]): void {
 }
 export function loadSkillLogs(): DanceSkillLog[] {
   if (typeof window === 'undefined') return [];
+  ensureDataRecoveryMigration();
   const logs = readSkillLogsCache();
   syncCollection({
     key: SKILL_LOGS_KEY,
@@ -453,6 +484,10 @@ export function getAttemptedLogs(logs: DanceSkillLog[], skillId: string): DanceS
   return getLogsForSkill(logs, skillId).filter((l) => l.attempted);
 }
 
+export function getSkillAttemptCount(logs: DanceSkillLog[], skillId: string): number {
+  return getAttemptedLogs(logs, skillId).reduce((sum, log) => sum + (log.attempts ?? 1), 0);
+}
+
 export function getAvgConfidence(logs: DanceSkillLog[], skillId: string): number {
   const attempted = getAttemptedLogs(logs, skillId);
   if (!attempted.length) return 0;
@@ -479,7 +514,7 @@ export function getMostPracticedSkill(skills: DanceSkill[], logs: DanceSkillLog[
   const active = skills.filter((s) => s.active);
   if (!active.length) return null;
   return active.sort((a, b) =>
-    getAttemptedLogs(logs, b.id).length - getAttemptedLogs(logs, a.id).length
+    getSkillAttemptCount(logs, b.id) - getSkillAttemptCount(logs, a.id)
   )[0];
 }
 
@@ -519,7 +554,7 @@ export function getSkillsReadyToLevel(skills: DanceSkill[], logs: DanceSkillLog[
 export function getCategoryAttemptCount(skills: DanceSkill[], logs: DanceSkillLog[], cat: SkillCategory): number {
   return skills
     .filter((s) => s.active && s.category === cat)
-    .reduce((sum, s) => sum + getAttemptedLogs(logs, s.id).length, 0);
+    .reduce((sum, s) => sum + getSkillAttemptCount(logs, s.id), 0);
 }
 
 /** Average confidence for a category (across all skills with logs) */

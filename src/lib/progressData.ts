@@ -1,4 +1,5 @@
 import { notifyAppDataUpdated } from "./appEvents";
+import { ensureDataRecoveryMigration } from "./dataRecovery";
 import { saveRemoteCollectionById, syncCollection } from "./supabaseSync";
 
 export interface WeightEntry {
@@ -43,6 +44,72 @@ export interface MediaEntry {
 
 const WEIGHT_KEY = "wellness-weight";
 const MEDIA_KEY = "wellness-media";
+const TRAINING_PROGRESS_KEY = "danceflow-training-progress";
+
+export type TrainingProgressType =
+  | "Strength"
+  | "Flexibility"
+  | "Pole trick"
+  | "Conditioning"
+  | "Endurance"
+  | "Balance"
+  | "Confidence"
+  | "Choreo"
+  | "Recovery"
+  | "Weight"
+  | "Wins";
+
+export interface TrainingProgressEntry {
+  id: string;
+  date: string;
+  types: TrainingProgressType[];
+  strength?: {
+    movement?: string;
+    previousLevel?: string;
+    currentLevel?: string;
+    metric?: string;
+    notes?: string;
+  };
+  flexibility?: {
+    area?: string;
+    status?: "Tight" | "Improving" | "Close" | "Hit it" | "Regressed" | "";
+    measurement?: string;
+    notes?: string;
+  };
+  poleTrick?: {
+    skillName?: string;
+    skillId?: string;
+    attempts?: number;
+    status?: "Attempted" | "Improved" | "Landed once" | "Landed consistently" | "Cleaned up" | "Mastered" | "";
+    side?: "Right" | "Left" | "Both" | "";
+    spottingNeeded?: boolean;
+    confidence?: number;
+    notes?: string;
+    mediaId?: string;
+    updateSkillStatus?: boolean;
+  };
+  conditioning?: {
+    routineName?: string;
+    routineId?: string;
+    completed?: boolean;
+    difficulty?: number;
+    notes?: string;
+  };
+  weight?: {
+    value?: number;
+    unit?: "kg" | "lbs";
+    notes?: string;
+  };
+  win?: {
+    biggestWin?: string;
+    improved?: string;
+    needsWork?: string;
+    nextTime?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  legacyWeightId?: string;
+}
 
 type WeightEntryRow = {
   id: string;
@@ -79,6 +146,10 @@ export function generateMediaId(): string {
   return `mv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+export function generateTrainingProgressId(): string {
+  return `tp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 function readWeightCache(): WeightEntry[] {
   if (typeof window === "undefined") return [];
   try {
@@ -107,6 +178,39 @@ function readMediaCache(): MediaEntry[] {
 function writeMediaCache(entries: MediaEntry[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(MEDIA_KEY, JSON.stringify(entries));
+}
+
+function weightEntryToTrainingProgress(entry: WeightEntry): TrainingProgressEntry {
+  return {
+    id: `legacy-${entry.id}`,
+    date: entry.date,
+    types: ["Weight"],
+    weight: {
+      value: Math.round(entry.weightKg * 10) / 10,
+      unit: "kg",
+      notes: entry.notes,
+    },
+    win: entry.notes ? { biggestWin: "", improved: "", needsWork: "", nextTime: entry.notes } : undefined,
+    createdAt: entry.createdAt,
+    updatedAt: entry.createdAt,
+    legacyWeightId: entry.id,
+  };
+}
+
+function readTrainingProgressCache(): TrainingProgressEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(TRAINING_PROGRESS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as TrainingProgressEntry[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTrainingProgressCache(entries: TrainingProgressEntry[]): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TRAINING_PROGRESS_KEY, JSON.stringify(entries));
 }
 
 function weightFromRow(row: WeightEntryRow): WeightEntry {
@@ -163,6 +267,7 @@ function mediaToRow(entry: MediaEntry): MediaEntryRow {
 
 export function loadWeightEntries(): WeightEntry[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   const entries = readWeightCache();
   syncCollection({
     key: WEIGHT_KEY,
@@ -184,8 +289,20 @@ export function saveWeightEntries(entries: WeightEntry[]): void {
   notifyAppDataUpdated();
 }
 
+export async function saveWeightEntriesAsync(entries: WeightEntry[]): Promise<void> {
+  if (typeof window === "undefined") throw new Error("Cannot save weight entries outside the browser.");
+  writeWeightCache(entries);
+  const persisted = readWeightCache();
+  if (persisted.length !== entries.length) {
+    throw new Error("Weight save could not be verified.");
+  }
+  saveRemoteCollectionById("weight_entries", "id", entries, (entry) => entry.id, weightToRow);
+  notifyAppDataUpdated();
+}
+
 export function loadMediaEntries(): MediaEntry[] {
   if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
   const entries = readMediaCache();
   syncCollection({
     key: MEDIA_KEY,
@@ -204,5 +321,31 @@ export function saveMediaEntries(entries: MediaEntry[]): void {
   if (typeof window === "undefined") return;
   writeMediaCache(entries);
   saveRemoteCollectionById("media_entries", "id", entries, (entry) => entry.id, mediaToRow);
+  notifyAppDataUpdated();
+}
+
+export function loadTrainingProgressEntries(): TrainingProgressEntry[] {
+  if (typeof window === "undefined") return [];
+  ensureDataRecoveryMigration();
+  const entries = readTrainingProgressCache();
+  if (entries.length > 0) return entries;
+
+  const migratedWeights = readWeightCache().map(weightEntryToTrainingProgress);
+  if (migratedWeights.length > 0) {
+    writeTrainingProgressCache(migratedWeights);
+    return migratedWeights;
+  }
+  return [];
+}
+
+export async function saveTrainingProgressEntries(entries: TrainingProgressEntry[]): Promise<void> {
+  if (typeof window === "undefined") throw new Error("Cannot save progress entries outside the browser.");
+  writeTrainingProgressCache(entries);
+  const persisted = readTrainingProgressCache();
+  const expectedIds = new Set(entries.map((entry) => entry.id));
+  const allSaved = persisted.length === entries.length && persisted.every((entry) => expectedIds.has(entry.id));
+  if (!allSaved) {
+    throw new Error("Progress entry save could not be verified.");
+  }
   notifyAppDataUpdated();
 }

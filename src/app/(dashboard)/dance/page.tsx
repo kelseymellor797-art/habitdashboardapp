@@ -1,20 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
+  CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import Panel from "@/components/dashboard/Panel";
 import SectionTitle from "@/components/dashboard/SectionTitle";
 import {
-  DANCE_CATEGORIES, DANCE_ITEMS,
+  DANCE_CATEGORIES,
   type DanceCategoryKey, type DanceCheckIn, type DanceDailyStatus,
-  type DanceChecklistScore, type DanceReflection, type ScoreValue,
-  loadCheckIns, saveCheckIns, loadDailyStatuses, saveDailyStatuses,
-  getWeekStart, formatWeekRange, todayISO, generateDanceId,
+  loadCheckIns, loadDailyStatuses, saveDailyStatuses,
+  loadTrainingPlan,
+  DAILY_TRAINING_FOCUS_CATEGORIES,
+  blankTrainingSectionItem,
+  calculateDailyTrainingPlan,
+  emptyDailyTrainingPlan,
+  loadDailyTrainingPlans,
+  saveDailyTrainingPlans,
+  getWeekStart, formatWeekRange, todayISO,
   getCategoryAvg, getWeekAvg, getStrongestCategory, getWeakestCategory,
-  getMostImproved, getScoreLabel, emptyReflection, emptyScores,
+  getMostImproved, getScoreLabel,
+  emptyTrainingPlan,
+  type DailyTrainingFocus,
+  type DailyTrainingFocusCategory,
+  type DailyTrainingSection,
+  type DailyTrainingPlan,
+  type TrainingPlan,
 } from "@/lib/danceData";
 import {
   type DanceSkill, type DanceSkillLog,
@@ -23,6 +35,8 @@ import {
   getAttemptedLogs, getCategoryConfig, getStatusConfig,
 } from "@/lib/danceSkillData";
 import SkillsTab from "@/components/dashboard/dance/SkillsTab";
+import { type ConditioningRoutine, loadConditioningRoutines } from "@/lib/conditioningData";
+import { type MediaEntry, loadMediaEntries } from "@/lib/progressData";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -35,50 +49,71 @@ const QUOTES = [
   "Strength doesn't arrive. It accumulates.",
 ];
 
-const SCORE_LABELS: Record<ScoreValue, string> = {
-  0: "Not yet", 1: "Improving", 2: "Solid", 3: "Strong",
-};
-const SCORE_COLORS: Record<ScoreValue, string> = {
-  0: "rgba(255,255,255,0.08)",
-  1: "rgba(251,191,36,0.25)",
-  2: "rgba(16,185,129,0.25)",
-  3: "rgba(139,92,246,0.35)",
-};
-const SCORE_TEXT: Record<ScoreValue, string> = {
-  0: "text-white/30",
-  1: "text-amber-400",
-  2: "text-emerald-400",
-  3: "text-violet-400",
-};
+type Tab = "overview" | "checkin" | "plan" | "analytics" | "history" | "skills" | "conditioning" | "media" | "progress";
 
-type Tab = "overview" | "checkin" | "analytics" | "history" | "skills";
+const TRAINING_FOCUS_OPTIONS = [
+  "Pole", "Floorwork", "Flexibility", "Strength", "Conditioning", "Heels",
+  "Spins", "Tricks", "Choreo", "Freestyle", "Recovery / mobility",
+];
 
-// ── Shared: score tap buttons ──────────────────────────────────────────────────
+const BODY_FEEL_OPTIONS = [
+  "Strong", "Tight", "Tired", "Flexible", "Weak", "Balanced", "Shaky", "Sore", "Better than expected",
+];
 
-function ScoreButtons({
-  value, onChange, disabled = false,
-}: { value: ScoreValue; onChange: (s: ScoreValue) => void; disabled?: boolean }) {
+const TRAINING_QUALITY_OPTIONS = [
+  "Amazing", "Good", "Okay", "Frustrating", "Hard but productive", "Not great", "Skipped",
+];
+
+function todayWeekdayLabel(): string {
+  return new Date().toLocaleDateString("en-US", { weekday: "long" });
+}
+
+function toggleString(list: string[] | undefined, value: string): string[] {
+  const current = list ?? [];
+  return current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+}
+
+function ChipButton({ selected, children, onClick }: { selected: boolean; children: ReactNode; onClick: () => void }) {
   return (
-    <div className="flex gap-1.5">
-      {([0, 1, 2, 3] as ScoreValue[]).map((s) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
+        selected
+          ? "border-emerald-300/50 bg-emerald-400/20 text-emerald-50 shadow-sm shadow-emerald-950/30"
+          : "border-white/[0.08] bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/70"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ScalePicker({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <div className="grid grid-cols-5 gap-2">
+      {[1, 2, 3, 4, 5].map((n) => (
         <button
-          key={s}
+          key={n}
           type="button"
-          disabled={disabled}
-          onClick={() => onChange(s)}
-          className={`w-9 h-9 rounded-lg text-xs font-semibold transition-all border ${
-            value === s
-              ? `border-transparent ${SCORE_TEXT[s]}`
-              : "border-white/[0.07] text-white/25 hover:border-white/20 hover:text-white/50"
+          onClick={() => onChange(n)}
+          className={`h-11 rounded-xl border text-sm font-semibold transition-colors ${
+            value === n
+              ? "border-violet-400/40 bg-violet-500/20 text-violet-100"
+              : "border-white/[0.08] bg-white/[0.03] text-white/35 hover:border-white/20"
           }`}
-          style={value === s ? { background: SCORE_COLORS[s] } : {}}
         >
-          {s}
+          {n}
         </button>
       ))}
     </div>
   );
 }
+
+const inputClass = "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm text-white/80 placeholder-white/20 outline-none focus:border-violet-400/40";
+const textareaClass = `${inputClass} min-h-24 resize-none`;
+
+// ── Shared: score tap buttons ──────────────────────────────────────────────────
 
 // ── Shared: category average bar card ─────────────────────────────────────────
 
@@ -139,10 +174,15 @@ function OverviewTab({
   const today     = todayISO();
   const weekStart = getWeekStart();
   const thisWeek  = checkIns.find((c) => c.weekOf === weekStart) ?? null;
-  const lastWeek  = checkIns.find((c) => c.weekOf === getWeekStart(new Date(Date.now() - 7 * 86400000))) ?? null;
+  const previousWeekStart = useMemo(() => {
+    const date = new Date(`${weekStart}T00:00:00`);
+    date.setDate(date.getDate() - 7);
+    return getWeekStart(date);
+  }, [weekStart]);
+  const lastWeek  = checkIns.find((c) => c.weekOf === previousWeekStart) ?? null;
   const todayStatus = dailyStatuses.find((d) => d.date === today);
 
-  const quote = useMemo(() => QUOTES[Math.floor(Math.random() * QUOTES.length)], []);
+  const quote = QUOTES[weekStart.charCodeAt(weekStart.length - 1) % QUOTES.length];
 
   const [daily, setDaily] = useState<DanceDailyStatus>(
     todayStatus ?? { date: today, mood: 0, soreness: 0, confidence: 0, trainedToday: false, notes: "" }
@@ -398,201 +438,242 @@ function OverviewTab({
 // ── Check-In tab ───────────────────────────────────────────────────────────────
 
 function CheckInTab({
-  checkIns,
-  onSave,
+  dailyStatuses,
+  onSaveDaily,
+  trainingPlan,
+  skills,
+  conditioningRoutines,
+  mediaEntries,
 }: {
-  checkIns: DanceCheckIn[];
-  onSave: (checkIn: DanceCheckIn) => void;
+  dailyStatuses: DanceDailyStatus[];
+  onSaveDaily: (status: DanceDailyStatus) => void;
+  trainingPlan: TrainingPlan;
+  skills: DanceSkill[];
+  conditioningRoutines: ConditioningRoutine[];
+  mediaEntries: MediaEntry[];
 }) {
-  const weekStart   = getWeekStart();
-  const existing    = checkIns.find((c) => c.weekOf === weekStart);
-  const [scores, setScores]         = useState<DanceChecklistScore[]>(existing?.scores ?? emptyScores());
-  const [reflection, setReflection] = useState<DanceReflection>(existing?.reflection ?? emptyReflection());
-  const [expandedCats, setExpandedCats] = useState<Set<DanceCategoryKey>>(new Set(["strength"]));
-  const [saved, setSaved]           = useState(false);
-
-  // On first mount checkIns is [] (parent useEffect hasn't fired yet).
-  // Once localStorage data loads and existing transitions from undefined → found,
-  // sync local form state so the user sees their saved scores.
-  useEffect(() => {
-    if (existing) {
-      setScores(existing.scores);
-      setReflection(existing.reflection);
+  const today = todayISO();
+  const existing = dailyStatuses.find((status) => status.date === today);
+  const todayPlan = trainingPlan.weeklyMap[todayWeekdayLabel()];
+  const todaysMedia = mediaEntries.filter((entry) => entry.date === today);
+  const activeGoals = trainingPlan.goals.filter((goal) => !["Mastered", "Paused"].includes(goal.status));
+  const [saved, setSaved] = useState(false);
+  const [daily, setDaily] = useState<DanceDailyStatus>(
+    existing ?? {
+      date: today,
+      mood: 3,
+      soreness: 3,
+      confidence: 3,
+      trainedToday: false,
+      trainingStatus: "",
+      trainingFocus: [],
+      energy: 3,
+      painNotes: "",
+      bodyFelt: [],
+      trainingQuality: "",
+      smallWin: "",
+      needsWork: "",
+      tomorrowNotes: "",
+      followedPlan: "",
+      skillsPracticed: [],
+      conditioningCompleted: [],
+      mediaLinked: [],
+      goalsWorkedOn: [],
+      goalProgressNotes: "",
+      notes: "",
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existing?.id]);
+  );
 
-  function setScore(itemId: string, score: ScoreValue) {
-    setScores((prev) =>
-      prev.map((s) => s.itemId === itemId ? { ...s, score } : s)
-    );
+  function setStatus(status: "yes" | "no" | "light") {
+    setDaily((current) => ({
+      ...current,
+      trainingStatus: status,
+      trainedToday: status === "yes" || status === "light",
+      trainingQuality: status === "no" && !current.trainingQuality ? "Skipped" : current.trainingQuality,
+    }));
     setSaved(false);
   }
 
-  function toggleCat(key: DanceCategoryKey) {
-    setExpandedCats((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  }
-
   function save() {
-    const now = new Date().toISOString();
-    const checkIn: DanceCheckIn = {
-      id:        existing?.id ?? generateDanceId(),
-      weekOf:    weekStart,
-      scores,
-      reflection,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    };
-    console.log("[CheckInTab save] weekOf:", weekStart, "scores with non-zero:", scores.filter(s => s.score > 0).length, "existing:", existing?.id ?? "none");
-    onSave(checkIn);
+    onSaveDaily({
+      ...daily,
+      mood: daily.energy ?? daily.mood ?? 3,
+      confidence: daily.confidence || 3,
+      notes: [daily.smallWin, daily.needsWork, daily.tomorrowNotes, daily.goalProgressNotes].filter(Boolean).join("\n"),
+    });
     setSaved(true);
   }
 
-  // Category completion %
-  function catProgress(catKey: DanceCategoryKey): number {
-    const items = DANCE_ITEMS.filter((i) => i.category === catKey);
-    const scored = items.filter((item) => {
-      const s = scores.find((sc) => sc.itemId === item.id);
-      return s && s.score > 0;
-    });
-    return items.length ? Math.round((scored.length / items.length) * 100) : 0;
-  }
-
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+    <div className="flex flex-col gap-5">
+      <div className="pb-3 border-b border-white/[0.06]">
         <div>
-          <h2 className="text-base font-semibold">Daily Training Check-In</h2>
-          <p className="text-[11px] text-white/30 mt-0.5">{formatWeekRange(weekStart)}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <p className="text-[10px] text-white/20">0 = Not yet · 1 = Improving · 2 = Solid · 3 = Strong</p>
+          <h2 className="text-xl font-semibold">Daily Dance Check-In</h2>
+          <p className="text-sm text-white/35 mt-1">{today}</p>
         </div>
       </div>
 
-      {/* Categories */}
-      {DANCE_CATEGORIES.map((cat) => {
-        const catItems = DANCE_ITEMS.filter((i) => i.category === cat.key);
-        const subcats  = [...new Set(catItems.map((i) => i.subcategory).filter(Boolean))] as string[];
-        const isOpen   = expandedCats.has(cat.key);
-        const prog     = catProgress(cat.key);
-
-        return (
-          <Panel key={cat.key} className="flex flex-col gap-0 !p-0 overflow-hidden">
-            {/* Category header — always visible */}
-            <button
-              type="button"
-              onClick={() => toggleCat(cat.key)}
-              className="flex items-center gap-3 w-full px-5 py-4 hover:bg-white/[0.02] transition-colors text-left"
-            >
-              <span className="text-lg">{cat.icon}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">{cat.label}</span>
-                  <span className="text-[10px] text-white/25">{catItems.length} items</span>
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex-1 h-1 rounded-full bg-white/[0.06]">
-                    <div className="h-full rounded-full transition-all duration-300" style={{ width: `${prog}%`, background: cat.color }} />
-                  </div>
-                  <span className="text-[10px] tabular-nums text-white/30">{prog}%</span>
-                </div>
-              </div>
-              <span className="text-white/20 text-sm">{isOpen ? "▲" : "▼"}</span>
-            </button>
-
-            {/* Items */}
-            {isOpen && (
-              <div className="px-5 pb-5 flex flex-col gap-4 border-t border-white/[0.05]">
-                {subcats.length > 0 ? (
-                  subcats.map((sub) => (
-                    <div key={sub} className="flex flex-col gap-3 mt-3">
-                      <p className="text-[10px] font-semibold text-white/25 uppercase tracking-widest">{sub}</p>
-                      {catItems.filter((i) => i.subcategory === sub).map((item) => {
-                        const current = scores.find((s) => s.itemId === item.id)?.score ?? 0 as ScoreValue;
-                        return (
-                          <div key={item.id} className="flex items-center gap-3">
-                            <p className="flex-1 text-[12px] text-white/60 leading-snug">{item.label}</p>
-                            <ScoreButtons value={current as ScoreValue} onChange={(s) => setScore(item.id, s)} />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex flex-col gap-3 mt-3">
-                    {catItems.map((item) => {
-                      const current = scores.find((s) => s.itemId === item.id)?.score ?? 0 as ScoreValue;
-                      return (
-                        <div key={item.id} className="flex items-center gap-3">
-                          <p className="flex-1 text-[12px] text-white/60 leading-snug">{item.label}</p>
-                          <ScoreButtons value={current as ScoreValue} onChange={(s) => setScore(item.id, s)} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </Panel>
-        );
-      })}
-
-      {/* Reflection */}
       <Panel>
-        <SectionTitle title="Reflection" subtitle="Take a moment — this is where growth becomes visible." />
-        <div className="grid grid-cols-2 gap-3">
-          {([
-            ["wins",                    "🌟 Wins",                          "What went well today?"],
-            ["evidenceOfProgress",      "📈 Evidence of progress",          "What feels different or better?"],
-            ["needsPatience",           "🌱 What needs patience",           "What are you still working on?"],
-            ["nextWeekStrengthGoal",    "💪 Next focus: strength",          "One strength focus…"],
-            ["nextWeekFlexibilityGoal", "🌸 Next focus: flexibility",       "One flexibility focus…"],
-            ["nextWeekTechniqueGoal",   "✨ Next focus: technique",         "One technique focus…"],
-          ] as [keyof DanceReflection, string, string][]).map(([field, label, placeholder]) => (
-            <div key={field} className="flex flex-col gap-1.5">
-              <p className="text-[11px] text-white/40">{label}</p>
-              <textarea
-                className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-[12px] text-white/70 placeholder-white/20 outline-none focus:border-violet-500/40 resize-none"
-                rows={3}
-                placeholder={placeholder}
-                value={reflection[field]}
-                onChange={(e) => setReflection((r) => ({ ...r, [field]: e.target.value }))}
-              />
+        <SectionTitle title="Today's Plan" subtitle="Pulled from Training Plan" />
+        {todayPlan && (todayPlan.restDay || todayPlan.plannedFocus || todayPlan.plannedSkills || todayPlan.plannedConditioning) ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+              <p className="text-[11px] uppercase tracking-widest text-white/25">Planned focus</p>
+              <p className="mt-1 text-sm text-white/75">{todayPlan.restDay ? "Rest day" : todayPlan.plannedFocus || "Not set"}</p>
             </div>
-          ))}
-        </div>
-        <div className="mt-3">
-          <p className="text-[11px] text-white/40 mb-1.5">📝 Additional notes</p>
-          <textarea
-            className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-[12px] text-white/70 placeholder-white/20 outline-none focus:border-violet-500/40 resize-none"
-            rows={2}
-            placeholder="Anything else you want to remember…"
-            value={reflection.notes}
-            onChange={(e) => setReflection((r) => ({ ...r, notes: e.target.value }))}
-          />
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+              <p className="text-[11px] uppercase tracking-widest text-white/25">Skills / conditioning</p>
+              <p className="mt-1 text-sm text-white/75">{[todayPlan.plannedSkills, todayPlan.plannedConditioning].filter(Boolean).join(" · ") || "Not set"}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-white/35">No plan set for today yet.</p>
+        )}
+        <div className="mt-4">
+          <p className="mb-2 text-sm text-white/60">Did I follow the plan?</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["yes", "partly", "no"] as const).map((option) => (
+              <ChipButton key={option} selected={daily.followedPlan === option} onClick={() => setDaily((current) => ({ ...current, followedPlan: option }))}>
+                {option === "yes" ? "Yes" : option === "partly" ? "Partly" : "No"}
+              </ChipButton>
+            ))}
+          </div>
         </div>
       </Panel>
 
-      {/* Save */}
-      <div className="flex items-center gap-3 pb-2">
-        <button
-          onClick={save}
-          className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:opacity-90 text-sm font-semibold transition-opacity shadow-lg shadow-violet-900/30"
-        >
+      <Panel>
+        <SectionTitle title="Training Status" />
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            ["yes", "Yes"],
+            ["no", "No"],
+            ["light", "Light / recovery only"],
+          ].map(([value, label]) => (
+            <ChipButton key={value} selected={daily.trainingStatus === value} onClick={() => setStatus(value as "yes" | "no" | "light")}>
+              {label}
+            </ChipButton>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel>
+        <SectionTitle title="Training Focus" subtitle="Choose all that apply" />
+        <div className="flex flex-wrap gap-2">
+          {TRAINING_FOCUS_OPTIONS.map((focus) => (
+            <ChipButton key={focus} selected={daily.trainingFocus?.includes(focus) ?? false} onClick={() => setDaily((current) => ({ ...current, trainingFocus: toggleString(current.trainingFocus, focus) }))}>
+              {focus}
+            </ChipButton>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel>
+        <SectionTitle title="Body Check" />
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div>
+            <p className="mb-2 text-sm text-white/60">Energy level</p>
+            <ScalePicker value={daily.energy ?? daily.mood ?? 3} onChange={(energy) => setDaily((current) => ({ ...current, energy, mood: energy }))} />
+          </div>
+          <div>
+            <p className="mb-2 text-sm text-white/60">Soreness level</p>
+            <ScalePicker value={daily.soreness || 3} onChange={(soreness) => setDaily((current) => ({ ...current, soreness }))} />
+          </div>
+        </div>
+        <div className="mt-5">
+          <p className="mb-2 text-sm text-white/60">Body felt</p>
+          <div className="flex flex-wrap gap-2">
+            {BODY_FEEL_OPTIONS.map((feeling) => (
+              <ChipButton key={feeling} selected={daily.bodyFelt?.includes(feeling) ?? false} onClick={() => setDaily((current) => ({ ...current, bodyFelt: toggleString(current.bodyFelt, feeling) }))}>
+                {feeling}
+              </ChipButton>
+            ))}
+          </div>
+        </div>
+        <textarea
+          className={`${textareaClass} mt-4 min-h-20`}
+          placeholder="Pain or injury notes..."
+          value={daily.painNotes ?? ""}
+          onChange={(event) => setDaily((current) => ({ ...current, painNotes: event.target.value }))}
+        />
+      </Panel>
+
+      <Panel>
+        <SectionTitle title="Training Quality" />
+        <div className="flex flex-wrap gap-2">
+          {TRAINING_QUALITY_OPTIONS.map((quality) => (
+            <ChipButton key={quality} selected={daily.trainingQuality === quality} onClick={() => setDaily((current) => ({ ...current, trainingQuality: quality }))}>
+              {quality}
+            </ChipButton>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel>
+        <SectionTitle title="Progress Notes" />
+        <div className="grid gap-3">
+          <input className={inputClass} placeholder="Small win today" value={daily.smallWin ?? ""} onChange={(event) => setDaily((current) => ({ ...current, smallWin: event.target.value }))} />
+          <input className={inputClass} placeholder="What needs work?" value={daily.needsWork ?? ""} onChange={(event) => setDaily((current) => ({ ...current, needsWork: event.target.value }))} />
+          <input className={inputClass} placeholder="Notes for tomorrow" value={daily.tomorrowNotes ?? ""} onChange={(event) => setDaily((current) => ({ ...current, tomorrowNotes: event.target.value }))} />
+        </div>
+      </Panel>
+
+      <Panel>
+        <SectionTitle title="Linked Items" subtitle="Optional" />
+        <div className="grid gap-5">
+          <div>
+            <p className="mb-2 text-sm text-white/60">Skills practiced</p>
+            <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
+              {skills.filter((skill) => skill.active).slice(0, 40).map((skill) => (
+                <ChipButton key={skill.id} selected={daily.skillsPracticed?.includes(skill.id) ?? false} onClick={() => setDaily((current) => ({ ...current, skillsPracticed: toggleString(current.skillsPracticed, skill.id) }))}>
+                  {skill.name}
+                </ChipButton>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-sm text-white/60">Conditioning routines completed</p>
+            <div className="flex flex-wrap gap-2">
+              {conditioningRoutines.filter((routine) => routine.active).map((routine) => (
+                <ChipButton key={routine.id} selected={daily.conditioningCompleted?.includes(routine.id) ?? false} onClick={() => setDaily((current) => ({ ...current, conditioningCompleted: toggleString(current.conditioningCompleted, routine.id) }))}>
+                  {routine.name}
+                </ChipButton>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-sm text-white/60">Media uploaded today</p>
+            <div className="flex flex-wrap gap-2">
+              {todaysMedia.length ? todaysMedia.map((entry) => (
+                <ChipButton key={entry.id} selected={daily.mediaLinked?.includes(entry.id) ?? false} onClick={() => setDaily((current) => ({ ...current, mediaLinked: toggleString(current.mediaLinked, entry.id) }))}>
+                  {entry.title}
+                </ChipButton>
+              )) : <p className="text-sm text-white/30">No media uploaded today.</p>}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 text-sm text-white/60">Goals worked on</p>
+            <div className="flex flex-wrap gap-2">
+              {activeGoals.length ? activeGoals.map((goal) => (
+                <ChipButton key={goal.id} selected={daily.goalsWorkedOn?.includes(goal.id) ?? false} onClick={() => setDaily((current) => ({ ...current, goalsWorkedOn: toggleString(current.goalsWorkedOn, goal.id) }))}>
+                  {goal.title}
+                </ChipButton>
+              )) : <p className="text-sm text-white/30">No active goals yet. Add some in Training Plan.</p>}
+            </div>
+            <textarea
+              className={`${textareaClass} mt-3 min-h-20`}
+              placeholder="Goal progress notes..."
+              value={daily.goalProgressNotes ?? ""}
+              onChange={(event) => setDaily((current) => ({ ...current, goalProgressNotes: event.target.value }))}
+            />
+          </div>
+        </div>
+      </Panel>
+
+      <div className="sticky bottom-4 z-10 flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-[#090c14]/95 p-3 shadow-2xl shadow-black/40 backdrop-blur">
+        <button onClick={save} className="rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white hover:bg-violet-500">
           Save daily check-in
         </button>
-        {saved && (
-          <div className="flex flex-col">
-            <p className="text-[12px] text-emerald-400">✓ Daily check-in saved.</p>
-            <p className="text-[11px] text-white/30 italic">Small progress still counts.</p>
-          </div>
-        )}
+        {saved && <p className="text-sm text-emerald-300">Saved for today.</p>}
       </div>
     </div>
   );
@@ -651,14 +732,16 @@ function AnalyticsTab({ checkIns }: { checkIns: DanceCheckIn[] }) {
   // (calculated from raw localStorage here to avoid prop drilling)
   const [dailyStats, setDailyStats] = useState({ mood: 0, soreness: 0, confidence: 0, trainingDays: 0 });
   useEffect(() => {
-    const statuses = loadDailyStatuses();
-    if (!statuses.length) return;
-    const recent = statuses.slice(-7);
-    setDailyStats({
-      mood:         Math.round((recent.reduce((s, d) => s + (d.mood || 0), 0) / recent.length) * 10) / 10,
-      soreness:     Math.round((recent.reduce((s, d) => s + (d.soreness || 0), 0) / recent.length) * 10) / 10,
-      confidence:   Math.round((recent.reduce((s, d) => s + (d.confidence || 0), 0) / recent.length) * 10) / 10,
-      trainingDays: recent.filter((d) => d.trainedToday).length,
+    queueMicrotask(() => {
+      const statuses = loadDailyStatuses();
+      if (!statuses.length) return;
+      const recent = statuses.slice(-7);
+      setDailyStats({
+        mood:         Math.round((recent.reduce((s, d) => s + (d.mood || 0), 0) / recent.length) * 10) / 10,
+        soreness:     Math.round((recent.reduce((s, d) => s + (d.soreness || 0), 0) / recent.length) * 10) / 10,
+        confidence:   Math.round((recent.reduce((s, d) => s + (d.confidence || 0), 0) / recent.length) * 10) / 10,
+        trainingDays: recent.filter((d) => d.trainedToday).length,
+      });
     });
   }, []);
 
@@ -755,7 +838,8 @@ function AnalyticsTab({ checkIns }: { checkIns: DanceCheckIn[] }) {
                 type="button"
                 onClick={() => setVisibleCats((prev) => {
                   const next = new Set(prev);
-                  next.has(cat.key) ? next.delete(cat.key) : next.add(cat.key);
+                  if (next.has(cat.key)) next.delete(cat.key);
+                  else next.add(cat.key);
                   return next;
                 })}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] border transition-all"
@@ -932,9 +1016,375 @@ function HistoryTab({
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
+function minutesValue(value: number): string {
+  return Number.isFinite(value) ? String(value) : "0";
+}
+
+function SummaryMetric({ label, value, sub, accent }: { label: string; value: string; sub: string; accent: string }) {
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.035] px-4 py-3">
+      <p className="text-[10px] uppercase tracking-widest text-white/25">{label}</p>
+      <p className={`mt-2 text-2xl font-bold tabular-nums ${accent}`}>{value}</p>
+      <p className="mt-1 text-[11px] text-white/30">{sub}</p>
+    </div>
+  );
+}
+
+function MinutesInput({ value, onChange }: { value: number; onChange: (minutes: number) => void }) {
+  return (
+    <label className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2">
+      <input
+        type="number"
+        min={0}
+        value={minutesValue(value)}
+        onChange={(event) => onChange(Math.max(0, Number.parseInt(event.target.value, 10) || 0))}
+        className="w-14 bg-transparent text-right text-sm font-semibold text-white outline-none tabular-nums"
+      />
+      <span className="text-[11px] text-white/30">min</span>
+    </label>
+  );
+}
+
+function SectionNotes({
+  value,
+  onChange,
+  placeholder,
+  compact = false,
+}: {
+  value: string;
+  onChange: (notes: string) => void;
+  placeholder: string;
+  compact?: boolean;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      rows={compact ? 2 : 3}
+      className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white/70 outline-none placeholder:text-white/20 focus:border-violet-400/50"
+    />
+  );
+}
+
+function FocusEditor({
+  focus,
+  onChange,
+  index,
+  onDelete,
+}: {
+  focus: DailyTrainingFocus;
+  onChange: (focus: DailyTrainingFocus) => void;
+  index: number;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-black/15 p-3">
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1.2fr)_150px_auto_auto]">
+        <input
+          value={focus.label}
+          onChange={(event) => onChange({ ...focus, label: event.target.value })}
+          placeholder={`Focus area ${index + 1}`}
+          className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white/75 outline-none placeholder:text-white/20 focus:border-pink-400/50"
+        />
+        <select
+          value={focus.type}
+          onChange={(event) => onChange({ ...focus, type: event.target.value as DailyTrainingFocusCategory })}
+          className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white/65 outline-none focus:border-pink-400/50"
+        >
+          {DAILY_TRAINING_FOCUS_CATEGORIES.map((category) => (
+            <option key={category} value={category}>{category}</option>
+          ))}
+        </select>
+        <label className="flex items-center justify-start gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-white/45 md:justify-center">
+          <input
+            type="checkbox"
+            checked={focus.completed}
+            onChange={(event) => onChange({ ...focus, completed: event.target.checked })}
+            className="h-4 w-4 accent-pink-500"
+          />
+          Done
+        </label>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="rounded-lg border border-rose-400/15 bg-rose-500/[0.08] px-3 py-2 text-[12px] text-rose-100/65 transition-colors hover:bg-rose-500/[0.14]"
+        >
+          Delete
+        </button>
+      </div>
+      <input
+        value={focus.notes}
+        onChange={(event) => onChange({ ...focus, notes: event.target.value })}
+        placeholder="Optional notes"
+        className="mt-2 w-full rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2 text-[12px] text-white/55 outline-none placeholder:text-white/18 focus:border-pink-400/40"
+      />
+    </div>
+  );
+}
+
+function SectionItemEditor({
+  item,
+  onChange,
+  index,
+  onDelete,
+}: {
+  item: DailyTrainingFocus;
+  onChange: (item: DailyTrainingFocus) => void;
+  index: number;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="grid gap-2 rounded-xl border border-white/[0.07] bg-black/15 p-3 md:grid-cols-[minmax(0,1fr)_80px_auto_auto]">
+      <input
+        value={item.label}
+        onChange={(event) => onChange({ ...item, label: event.target.value })}
+        placeholder={`Item ${index + 1}`}
+        className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white/75 outline-none placeholder:text-white/20 focus:border-violet-400/50"
+      />
+      <input
+        type="number"
+        min={0}
+        value={item.minutes || ""}
+        onChange={(event) => onChange({ ...item, minutes: Math.max(0, Number.parseInt(event.target.value, 10) || 0) })}
+        placeholder="Min"
+        className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white/75 outline-none placeholder:text-white/20 focus:border-violet-400/50"
+      />
+      <label className="flex items-center justify-start gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-white/45 md:justify-center">
+        <input
+          type="checkbox"
+          checked={item.completed}
+          onChange={(event) => onChange({ ...item, completed: event.target.checked })}
+          className="h-4 w-4 accent-violet-500"
+        />
+        Done
+      </label>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="rounded-lg border border-rose-400/15 bg-rose-500/[0.08] px-3 py-2 text-[12px] text-rose-100/65 transition-colors hover:bg-rose-500/[0.14]"
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
+function PlanSectionCard({
+  section,
+  index,
+  onChange,
+}: {
+  section: DailyTrainingSection;
+  index: number;
+  onChange: (section: DailyTrainingSection) => void;
+}) {
+  function updateItem(index: number, item: DailyTrainingFocus) {
+    onChange({
+      ...section,
+      focusAreas: section.focusAreas.map((current, itemIndex) => (itemIndex === index ? { ...item, sortOrder: itemIndex } : current)),
+    });
+  }
+
+  function addItem() {
+    onChange({
+      ...section,
+      focusAreas: [
+        ...section.focusAreas,
+        blankTrainingSectionItem(section.focusAreas.length, section.category === "Training Session" ? "focus" : "field"),
+      ],
+    });
+  }
+
+  function deleteItem(focusIndex: number) {
+    onChange({
+      ...section,
+      focusAreas: section.focusAreas
+        .filter((_, itemIndex) => itemIndex !== focusIndex)
+        .map((focus, itemIndex) => ({ ...focus, sortOrder: itemIndex })),
+    });
+  }
+
+  const isTrainingSession = section.category === "Training Session";
+  const soft = section.category === "Break";
+  const addLabel = isTrainingSession
+    ? "+ Add Focus Area"
+    : `+ Add ${section.category.replace("Training ", "")} Item`;
+
+  return (
+    <Panel className={`${isTrainingSession ? "border-pink-400/15 bg-pink-500/[0.035]" : soft ? "py-3 bg-white/[0.025]" : ""}`}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="mb-2 text-[11px] uppercase tracking-widest text-white/25">{index + 1}. {section.category}</p>
+            <input
+              value={section.title}
+              onChange={(event) => onChange({ ...section, title: event.target.value })}
+              placeholder={section.category === "Training Session" ? `Training Session ${index + 1}` : section.category}
+              className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white/85 outline-none placeholder:text-white/20 focus:border-violet-400/50"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <MinutesInput value={section.minutes} onChange={(minutes) => onChange({ ...section, minutes })} />
+            <label className="flex items-center gap-2 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.08] px-3 py-2 text-[12px] text-emerald-100/70">
+              <input
+                type="checkbox"
+                checked={section.countsAsActiveTime}
+                onChange={(event) => onChange({ ...section, countsAsActiveTime: event.target.checked })}
+                className="h-4 w-4 accent-emerald-500"
+              />
+              Active
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-white/45">
+              <input type="checkbox" checked={section.completed} onChange={(event) => onChange({ ...section, completed: event.target.checked })} className="h-4 w-4 accent-violet-500" />
+              Done
+            </label>
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          {section.focusAreas.map((focus, index) => (
+            isTrainingSession ? (
+              <FocusEditor
+                key={focus.id || index}
+                focus={focus}
+                index={index}
+                onChange={(updated) => updateItem(index, updated)}
+                onDelete={() => deleteItem(index)}
+              />
+            ) : (
+              <SectionItemEditor
+                key={focus.id || index}
+                item={focus}
+                index={index}
+                onChange={(updated) => updateItem(index, updated)}
+                onDelete={() => deleteItem(index)}
+              />
+            )
+          ))}
+        </div>
+
+        <SectionNotes
+          value={section.notes}
+          onChange={(notes) => onChange({ ...section, notes })}
+          placeholder={isTrainingSession ? "Session notes, combinations, reminders, safety cues" : "Notes / plan"}
+          compact={soft}
+        />
+        <button
+          type="button"
+          onClick={addItem}
+          className={`w-fit rounded-lg border px-3 py-2 text-[12px] font-semibold transition-colors ${
+            isTrainingSession
+              ? "border-pink-300/15 bg-pink-500/[0.08] text-pink-100/70 hover:bg-pink-500/[0.14]"
+              : "border-violet-300/15 bg-violet-500/[0.08] text-violet-100/70 hover:bg-violet-500/[0.14]"
+          }`}
+        >
+          {addLabel}
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
+function TrainingPlanTab({
+  plans,
+  onSavePlans,
+}: {
+  plans: DailyTrainingPlan[];
+  onSavePlans: (plans: DailyTrainingPlan[]) => void;
+}) {
+  const [selectedDate, setSelectedDate] = useState(todayISO());
+  const savedPlan = useMemo(() => plans.find((plan) => plan.date === selectedDate), [plans, selectedDate]);
+  const [draft, setDraft] = useState<DailyTrainingPlan>(() => savedPlan ?? emptyDailyTrainingPlan(selectedDate));
+  const calculated = calculateDailyTrainingPlan(draft);
+  const completedSections = draft.sections.filter((section) => section.completed).length;
+  const trainingSessionCount = draft.sections.filter((section) => section.category === "Training Session").length;
+  const totalFocusAreas = draft.sections
+    .flatMap((section) => section.focusAreas)
+    .filter((focus) => focus.label.trim()).length;
+
+  useEffect(() => {
+    setDraft(savedPlan ?? emptyDailyTrainingPlan(selectedDate));
+  }, [savedPlan, selectedDate]);
+
+  function updateDraft(patch: Partial<DailyTrainingPlan>) {
+    setDraft((current) => {
+      const next = { ...current, ...patch };
+      return { ...next, ...calculateDailyTrainingPlan(next), updatedAt: new Date().toISOString() };
+    });
+  }
+
+  function updateSection(sectionId: string, section: DailyTrainingSection) {
+    updateDraft({
+      sections: draft.sections.map((item) =>
+        item.id === sectionId ? { ...section, updatedAt: new Date().toISOString() } : item,
+      ),
+    });
+  }
+
+  function savePlan() {
+    const normalized = {
+      ...draft,
+      ...calculateDailyTrainingPlan(draft),
+      updatedAt: new Date().toISOString(),
+    };
+    const nextPlans = plans.some((plan) => plan.date === normalized.date)
+      ? plans.map((plan) => (plan.date === normalized.date ? normalized : plan))
+      : [...plans, normalized];
+    onSavePlans(nextPlans);
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-3 border-b border-white/[0.06] pb-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Training Plan</h2>
+          <p className="mt-1 text-sm text-white/35">Plan one full dance or pole training day with real saved data.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] uppercase tracking-widest text-white/25">Date</label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(event) => setSelectedDate(event.target.value)}
+            className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white/70 outline-none focus:border-violet-400/50"
+          />
+          <button
+            type="button"
+            onClick={savePlan}
+            className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-500"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <SummaryMetric label="Active Training Time" value={`${calculated.activeTrainingTime}m`} sub="Active sections only" accent="text-emerald-300" />
+        <SummaryMetric label="Total Plan Time" value={`${calculated.totalPlanTime}m`} sub="All sections" accent="text-violet-300" />
+        <SummaryMetric label="Break / Prep / Cleanup Time" value={`${calculated.breakPrepCleanupTime}m`} sub="Non-active sections" accent="text-sky-300" />
+        <SummaryMetric label="Completed Sections" value={`${completedSections}/${draft.sections.length}`} sub={`${trainingSessionCount} sessions`} accent="text-pink-300" />
+        <SummaryMetric label="Total Focus Areas" value={String(totalFocusAreas)} sub="Named focus items" accent="text-amber-300" />
+      </div>
+
+      <div className="grid gap-4">
+        {draft.sections.map((section, index) => (
+          <PlanSectionCard
+            key={section.id}
+            section={section}
+            index={index}
+            onChange={(updated) => updateSection(section.id, updated)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview",  label: "Overview"   },
   { id: "checkin",   label: "Check-In"   },
+  { id: "plan",      label: "Training Plan" },
   { id: "analytics", label: "Analytics"  },
   { id: "history",   label: "History"    },
   { id: "skills",    label: "Skills"     },
@@ -946,27 +1396,25 @@ export default function DancePage() {
   const [dailyStatuses, setDailyStatuses] = useState<DanceDailyStatus[]>([]);
   const [skills,    setSkills]      = useState<DanceSkill[]>([]);
   const [skillLogs, setSkillLogs]   = useState<DanceSkillLog[]>([]);
+  const [trainingPlan, setTrainingPlan] = useState<TrainingPlan>(emptyTrainingPlan());
+  const [dailyTrainingPlans, setDailyTrainingPlans] = useState<DailyTrainingPlan[]>([]);
+  const [conditioningRoutines, setConditioningRoutines] = useState<ConditioningRoutine[]>([]);
+  const [mediaEntries, setMediaEntries] = useState<MediaEntry[]>([]);
   const [mounted, setMounted]       = useState(false);
 
   useEffect(() => {
-    setCheckIns(loadCheckIns());
-    setDailyStatuses(loadDailyStatuses());
-    setSkills(loadSkills());
-    setSkillLogs(loadSkillLogs());
-    setMounted(true);
-  }, []);
-
-  function handleSaveCheckIn(ci: DanceCheckIn) {
-    console.log("[handleSaveCheckIn] called with weekOf:", ci.weekOf, "id:", ci.id);
-    setCheckIns((prev) => {
-      const updated = prev.some((c) => c.weekOf === ci.weekOf)
-        ? prev.map((c) => c.weekOf === ci.weekOf ? ci : c)
-        : [...prev, ci];
-      console.log("[handleSaveCheckIn] updated array length:", updated.length);
-      saveCheckIns(updated);
-      return updated;
+    queueMicrotask(() => {
+      setCheckIns(loadCheckIns());
+      setDailyStatuses(loadDailyStatuses());
+      setSkills(loadSkills());
+      setSkillLogs(loadSkillLogs());
+      setTrainingPlan(loadTrainingPlan());
+      setDailyTrainingPlans(loadDailyTrainingPlans());
+      setConditioningRoutines(loadConditioningRoutines());
+      setMediaEntries(loadMediaEntries());
+      setMounted(true);
     });
-  }
+  }, []);
 
   function handleSaveDaily(d: DanceDailyStatus) {
     const updated = dailyStatuses.some((s) => s.date === d.date)
@@ -976,7 +1424,7 @@ export default function DancePage() {
     saveDailyStatuses(updated);
   }
 
-  function handleEditWeek(weekOf: string) {
+  function handleEditWeek() {
     // pre-load existing check-in and switch to check-in tab
     setTab("checkin");
     // scroll to top
@@ -1001,6 +1449,11 @@ export default function DancePage() {
     const updated = [...skillLogs, log];
     setSkillLogs(updated);
     saveSkillLogs(updated);
+  }
+
+  function handleSaveDailyTrainingPlans(plans: DailyTrainingPlan[]) {
+    setDailyTrainingPlans(plans);
+    saveDailyTrainingPlans(plans);
   }
 
   if (!mounted) return null;
@@ -1043,7 +1496,17 @@ export default function DancePage() {
         />
       )}
       {tab === "checkin" && (
-        <CheckInTab checkIns={checkIns} onSave={handleSaveCheckIn} />
+        <CheckInTab
+          dailyStatuses={dailyStatuses}
+          onSaveDaily={handleSaveDaily}
+          trainingPlan={trainingPlan}
+          skills={skills}
+          conditioningRoutines={conditioningRoutines}
+          mediaEntries={mediaEntries}
+        />
+      )}
+      {tab === "plan" && (
+        <TrainingPlanTab plans={dailyTrainingPlans} onSavePlans={handleSaveDailyTrainingPlans} />
       )}
       {tab === "analytics" && (
         <AnalyticsTab checkIns={checkIns} />

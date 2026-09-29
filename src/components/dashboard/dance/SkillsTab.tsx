@@ -59,6 +59,7 @@ function LogAttemptModal({ skill, onSave, onClose }: {
   const catCfg = getCategoryConfig(skill.category);
   const [date,              setDate]              = useState(todayISODate());
   const [attempted,         setAttempted]         = useState(true);
+  const [attempts,          setAttempts]          = useState(1);
   const [confidenceBefore,  setConfidenceBefore]  = useState(3);
   const [confidenceAfter,   setConfidenceAfter]   = useState<number>(3);
   const [fearLevel,         setFearLevel]         = useState<number>(3);
@@ -70,9 +71,17 @@ function LogAttemptModal({ skill, onSave, onClose }: {
 
   function save() {
     onSave({
-      id: generateLogId(), skillId: skill.id, date, attempted,
+      id: generateLogId(),
+      skillId: skill.id,
+      skillName: skill.name,
+      category: skill.category,
+      date,
+      attempted,
+      attempts: attempted ? Math.max(1, attempts) : 0,
+      confidence: confidenceAfter ?? confidenceBefore,
       confidenceBefore, confidenceAfter, fearLevel, formQuality, effortLevel,
-      outcome, notes, filmed,
+      outcome, notes, filmed, tags: skill.tags,
+      win: ["landed_once", "building_consistency", "consistent", "mastered"].includes(outcome),
     });
     onClose();
   }
@@ -115,6 +124,16 @@ function LogAttemptModal({ skill, onSave, onClose }: {
 
         {attempted && (
           <>
+            <div>
+              <label className="text-[11px] text-white/40 block mb-1.5">Attempts this session</label>
+              <input
+                type="number"
+                min={1}
+                value={attempts}
+                onChange={(e) => setAttempts(Math.max(1, Number(e.target.value) || 1))}
+                className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-white/70 outline-none focus:border-violet-500/40 w-full"
+              />
+            </div>
             {[
               { label: "Confidence before (1–5)", val: confidenceBefore, set: setConfidenceBefore, color: "#8b5cf6" },
               { label: "Confidence after (1–5)",  val: confidenceAfter,  set: setConfidenceAfter,  color: "#10b981" },
@@ -292,6 +311,10 @@ function SkillFormModal({ skill, onSave, onClose }: {
 
 // ── Skill Detail Modal ─────────────────────────────────────────────────────────
 
+function totalAttemptCount(logs: DanceSkillLog[], skillId: string): number {
+  return getAttemptedLogs(logs, skillId).reduce((sum, log) => sum + (log.attempts ?? 1), 0);
+}
+
 function SkillDetailModal({ skill, logs, onLog, onEdit, onArchive, onClose }: {
   skill: DanceSkill;
   logs: DanceSkillLog[];
@@ -303,6 +326,7 @@ function SkillDetailModal({ skill, logs, onLog, onEdit, onArchive, onClose }: {
   const catCfg      = getCategoryConfig(skill.category);
   const skillLogs   = getLogsForSkill(logs, skill.id);
   const attempted   = getAttemptedLogs(logs, skill.id);
+  const attemptCount = totalAttemptCount(logs, skill.id);
   const avgConf     = getAvgConfidence(logs, skill.id);
   const trend       = getConfidenceTrend(logs, skill.id).slice(-10);
   const daysSince   = getDaysSinceLastAttempt(logs, skill.id);
@@ -338,7 +362,7 @@ function SkillDetailModal({ skill, logs, onLog, onEdit, onArchive, onClose }: {
           {/* Stats row */}
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-2xl font-bold tabular-nums text-violet-400">{attempted.length}</p>
+              <p className="text-2xl font-bold tabular-nums text-violet-400">{attemptCount}</p>
               <p className="text-[10px] text-white/30 mt-0.5">total attempts</p>
             </div>
             <div className="text-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
@@ -385,7 +409,7 @@ function SkillDetailModal({ skill, logs, onLog, onEdit, onArchive, onClose }: {
           )}
 
           {skill.notes && (
-            <p className="text-[12px] text-white/40 italic bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2">"{skill.notes}"</p>
+            <p className="text-[12px] text-white/40 italic bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2">&quot;{skill.notes}&quot;</p>
           )}
 
           {/* Recent log history */}
@@ -466,7 +490,7 @@ function SkillsAnalytics({ skills, logs }: { skills: DanceSkill[]; logs: DanceSk
 
   // Bar chart: attempts per skill
   const attemptData = activeSkills
-    .map((s) => ({ name: s.name.length > 12 ? s.name.slice(0, 11) + "…" : s.name, attempts: getAttemptedLogs(logs, s.id).length, color: getCategoryConfig(s.category).color }))
+    .map((s) => ({ name: s.name.length > 12 ? s.name.slice(0, 11) + "…" : s.name, attempts: totalAttemptCount(logs, s.id), color: getCategoryConfig(s.category).color }))
     .filter((d) => d.attempts > 0)
     .sort((a, b) => b.attempts - a.attempts)
     .slice(0, 10);
@@ -801,7 +825,7 @@ interface SkillsTabProps {
   onSaveLog: (log: DanceSkillLog) => void;
 }
 
-export default function SkillsTab({ skills, skillLogs, onSaveSkill, onDeleteSkill, onSaveLog }: SkillsTabProps) {
+export default function SkillsTab({ skills, skillLogs, onSaveSkill, onSaveLog }: SkillsTabProps) {
   const [view,           setView]           = useState<SkillsView>('list');
   const [statusFilter,   setStatusFilter]   = useState<SkillMilestoneStatus | 'all'>('all');
   const [catFilter,      setCatFilter]      = useState<SkillCategory | 'all'>('all');
@@ -985,7 +1009,7 @@ export default function SkillsTab({ skills, skillLogs, onSaveSkill, onDeleteSkil
               <div className="flex flex-col items-center gap-3 py-10 text-center">
                 <div className="text-4xl">🌸</div>
                 <p className="text-white/50 font-medium">Start tracking your moves</p>
-                <p className="text-white/25 text-sm max-w-xs">Add pole moves, tricks, and milestones you're working on. Log sessions to track your progress over time.</p>
+                <p className="text-white/25 text-sm max-w-xs">Add pole moves, tricks, and milestones you&apos;re working on. Log sessions to track your progress over time.</p>
                 <button onClick={() => setShowAddForm(true)}
                   className="mt-2 px-5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 text-sm font-semibold hover:opacity-90 transition-opacity">
                   Add your first skill
@@ -1007,7 +1031,7 @@ export default function SkillsTab({ skills, skillLogs, onSaveSkill, onDeleteSkil
                 const catCfg   = getCategoryConfig(skill.category);
                 const msCfg    = getStatusConfig(skill.currentStatus);
                 const avgConf  = getAvgConfidence(skillLogs, skill.id);
-                const attempts = getAttemptedLogs(skillLogs, skill.id).length;
+                const attempts = totalAttemptCount(skillLogs, skill.id);
                 const daysSince = getDaysSinceLastAttempt(skillLogs, skill.id);
 
                 return (
